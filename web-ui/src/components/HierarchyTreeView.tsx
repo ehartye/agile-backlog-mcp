@@ -1,4 +1,5 @@
 import { useEffect, useState, useRef } from 'react';
+import { useParams } from 'react-router-dom';
 import * as d3 from 'd3';
 import { api } from '../utils/api';
 import type { HierarchyNode, EntityStatus } from '../types';
@@ -12,10 +13,13 @@ const statusColors: Record<EntityStatus, string> = {
 };
 
 interface HierarchyTreeViewProps {
-  projectId: number | null;
+  projectId?: number | null;
 }
 
-export default function HierarchyTreeView({ projectId }: HierarchyTreeViewProps) {
+export default function HierarchyTreeView({ projectId: projectIdProp }: HierarchyTreeViewProps) {
+  const { projectId: projectIdParam } = useParams<{ projectId: string }>();
+  const projectId = projectIdParam ? parseInt(projectIdParam) : projectIdProp;
+
   const svgRef = useRef<SVGSVGElement>(null);
   const [data, setData] = useState<HierarchyNode[]>([]);
   const [loading, setLoading] = useState(true);

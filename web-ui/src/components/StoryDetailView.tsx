@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Edit, Trash } from 'lucide-react';
 import { api } from '../utils/api';
 import type { Story, Task, EntityStatus, Priority } from '../types';
@@ -23,28 +23,25 @@ const priorityColors: Record<Priority, string> = {
 };
 
 export default function StoryDetailView() {
-  const { id } = useParams<{ id: string }>();
+  const { projectId: projectIdParam, storyId } = useParams<{ projectId: string; storyId: string }>();
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
   const [story, setStory] = useState<Story | null>(null);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
   const [editModalOpen, setEditModalOpen] = useState(false);
 
-  // Get project from URL params
-  const projectParam = searchParams.get('project');
-  const projectId = projectParam ? parseInt(projectParam) : null;
+  const projectId = projectIdParam ? parseInt(projectIdParam) : null;
 
   useEffect(() => {
     loadStory();
-  }, [id]);
+  }, [storyId]);
 
   async function loadStory() {
-    if (!id) return;
+    if (!storyId) return;
 
     try {
       setLoading(true);
-      const data = await api.stories.get(parseInt(id));
+      const data = await api.stories.get(parseInt(storyId));
       setStory(data.story);
       setTasks(data.tasks || []);
     } catch (error) {
@@ -59,14 +56,14 @@ export default function StoryDetailView() {
 
     try {
       await api.stories.delete(story.id);
-      navigate(`/${projectId ? `?project=${projectId}` : ''}`);
+      navigate(projectId ? `/project/${projectId}` : '/');
     } catch (error) {
       console.error('Failed to delete story:', error);
     }
   };
 
   const handleBack = () => {
-    navigate(`/${projectId ? `?project=${projectId}` : ''}`);
+    navigate(projectId ? `/project/${projectId}` : '/');
   };
 
   if (loading) {

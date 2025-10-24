@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useParams } from 'react-router-dom';
 import { Plus, Edit, Trash, ChevronDown, ChevronUp } from 'lucide-react';
 import { api } from '../utils/api';
 import type { Epic, Story, EntityStatus, Priority } from '../types';
@@ -24,10 +24,13 @@ const priorityColors: Record<Priority, string> = {
 };
 
 interface BacklogListViewProps {
-  projectId: number | null;
+  projectId?: number | null;
 }
 
-export default function BacklogListView({ projectId }: BacklogListViewProps) {
+export default function BacklogListView({ projectId: projectIdProp }: BacklogListViewProps) {
+  const { projectId: projectIdParam } = useParams<{ projectId: string }>();
+  const projectId = projectIdParam ? parseInt(projectIdParam) : projectIdProp;
+
   const [epics, setEpics] = useState<Epic[]>([]);
   const [stories, setStories] = useState<Story[]>([]);
   const [loading, setLoading] = useState(true);
@@ -208,7 +211,7 @@ export default function BacklogListView({ projectId }: BacklogListViewProps) {
                   <div className="flex-1 min-w-0">
                     <div className="flex flex-wrap items-center gap-2 mb-2">
                       <Link
-                        to={`/story/${story.id}${projectId ? `?project=${projectId}` : ''}`}
+                        to={projectId ? `/project/${projectId}/story/${story.id}` : '#'}
                         className="text-base md:text-lg font-semibold text-gray-800 hover:text-blue-600 break-words"
                       >
                         {story.title}

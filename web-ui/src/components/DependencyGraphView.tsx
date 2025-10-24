@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useParams } from 'react-router-dom';
 import {
   ReactFlow,
   Node,
@@ -24,10 +25,13 @@ const statusColors: Record<EntityStatus, string> = {
 };
 
 interface DependencyGraphViewProps {
-  projectId: number | null;
+  projectId?: number | null;
 }
 
-export default function DependencyGraphView({ projectId }: DependencyGraphViewProps) {
+export default function DependencyGraphView({ projectId: projectIdProp }: DependencyGraphViewProps) {
+  const { projectId: projectIdParam } = useParams<{ projectId: string }>();
+  const projectId = projectIdParam ? parseInt(projectIdParam) : projectIdProp;
+
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
   const [loading, setLoading] = useState(true);

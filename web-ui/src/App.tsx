@@ -1,4 +1,4 @@
-import { Routes, Route, Link, useLocation, useSearchParams } from 'react-router-dom';
+import { Routes, Route, Link, useLocation, useNavigate } from 'react-router-dom';
 import { Network, TreePine, List, AlertTriangle, Menu, X } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import DependencyGraphView from './components/DependencyGraphView';
@@ -9,25 +9,21 @@ import ProjectSelector from './components/ProjectSelector';
 
 function App() {
   const location = useLocation();
-  const [searchParams, setSearchParams] = useSearchParams();
+  const navigate = useNavigate();
   const [selectedProjectId, setSelectedProjectId] = useState<number | null>(null);
   const [apiConnected, setApiConnected] = useState<boolean>(true);
   const [checkingApi, setCheckingApi] = useState<boolean>(true);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState<boolean>(false);
 
-  // Initialize project from URL params on load
+  // Extract project ID from URL path
   useEffect(() => {
-    const projectParam = searchParams.get('project');
-    if (projectParam) {
-      const projectId = parseInt(projectParam);
-      if (!isNaN(projectId)) {
-        setSelectedProjectId(projectId);
-      }
+    const match = location.pathname.match(/^\/project\/(\d+)/);
+    if (match) {
+      setSelectedProjectId(parseInt(match[1]));
     } else {
-      // If there's no project param in URL, clear the selection
       setSelectedProjectId(null);
     }
-  }, [searchParams]);
+  }, [location.pathname]);
 
   useEffect(() => {
     const checkApiHealth = async () => {
@@ -47,21 +43,23 @@ function App() {
     return () => clearInterval(interval);
   }, []);
 
-  // Update URL when project changes
+  // Navigate to project when selection changes
   const handleProjectChange = (projectId: number | null) => {
-    setSelectedProjectId(projectId);
     if (projectId) {
-      setSearchParams({ project: projectId.toString() });
+      navigate(`/project/${projectId}`);
     } else {
-      setSearchParams({});
+      navigate('/');
     }
   };
 
-  const navItems = [
-    { path: '/', icon: List, label: 'Backlog List' },
-    { path: '/dag', icon: Network, label: 'Dependency Graph' },
-    { path: '/tree', icon: TreePine, label: 'Hierarchy Tree' },
-  ];
+  const getNavItems = () => {
+    const basePrefix = selectedProjectId ? `/project/${selectedProjectId}` : '';
+    return [
+      { path: basePrefix || '/', icon: List, label: 'Backlog List' },
+      { path: `${basePrefix}/dag`, icon: Network, label: 'Dependency Graph' },
+      { path: `${basePrefix}/tree`, icon: TreePine, label: 'Hierarchy Tree' },
+    ];
+  };
 
   return (
     <div className="flex h-screen bg-gray-50 flex-col">
@@ -115,7 +113,7 @@ function App() {
         />
 
         <ul className="space-y-1 px-3 mt-4">
-          {navItems.map(({ path, icon: Icon, label }) => (
+          {getNavItems().map(({ path, icon: Icon, label }) => (
             <li key={path}>
               <Link
                 to={path}
@@ -174,10 +172,11 @@ function App() {
         {/* Main content */}
         <main className="flex-1 overflow-hidden w-full min-w-0">
           <Routes>
-            <Route path="/" element={<BacklogListView projectId={selectedProjectId} />} />
-            <Route path="/story/:id" element={<StoryDetailView />} />
-            <Route path="/dag" element={<DependencyGraphView projectId={selectedProjectId} />} />
-            <Route path="/tree" element={<HierarchyTreeView projectId={selectedProjectId} />} />
+            <Route path="/" element={<BacklogListView projectId={null} />} />
+            <Route path="/project/:projectId" element={<BacklogListView />} />
+            <Route path="/project/:projectId/story/:storyId" element={<StoryDetailView />} />
+            <Route path="/project/:projectId/dag" element={<DependencyGraphView />} />
+            <Route path="/project/:projectId/tree" element={<HierarchyTreeView />} />
           </Routes>
         </main>
       </div>

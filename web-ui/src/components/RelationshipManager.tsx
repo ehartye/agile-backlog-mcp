@@ -349,7 +349,7 @@ export default function RelationshipManager({ entityType, entityId, projectId }:
                   </span>
                   {label.targetType === 'story' ? (
                     <Link
-                      to={`/story/${label.targetId}${projectId ? `?project=${projectId}` : ''}`}
+                      to={projectId ? `/project/${projectId}/story/${label.targetId}` : '#'}
                       className="text-sm text-blue-600 hover:text-blue-800 hover:underline"
                     >
                       {title}
