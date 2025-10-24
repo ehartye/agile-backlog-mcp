@@ -2,6 +2,8 @@
 export type EntityStatus = 'todo' | 'in_progress' | 'review' | 'done' | 'blocked';
 export type Priority = 'low' | 'medium' | 'high' | 'critical';
 export type DependencyType = 'blocks' | 'blocked_by';
+export type EntityType = 'project' | 'epic' | 'story' | 'task';
+export type RelationshipType = 'blocks' | 'blocked_by' | 'related_to' | 'cloned_from' | 'depends_on';
 
 export interface Project {
   id: number;
@@ -59,6 +61,31 @@ export interface Dependency {
   depends_on_story_id: number;
   dependency_type: DependencyType;
   created_at: string;
+}
+
+export interface Relationship {
+  id: number;
+  source_type: EntityType;
+  source_id: number;
+  target_type: EntityType;
+  target_id: number;
+  relationship_type: RelationshipType;
+  project_id: number;
+  agent_identifier: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface Note {
+  id: number;
+  parent_type: EntityType;
+  parent_id: number;
+  content: string;
+  agent_identifier: string;
+  author_name: string | null;
+  project_id: number;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface StatusTransition {
@@ -119,6 +146,32 @@ export interface CreateDependencyInput {
   dependency_type: DependencyType;
 }
 
+export interface CreateRelationshipInput {
+  source_type: EntityType;
+  source_id: number;
+  target_type: EntityType;
+  target_id: number;
+  relationship_type: RelationshipType;
+  project_id: number;
+  agent_identifier: string;
+}
+
+export interface CreateNoteInput {
+  parent_type: EntityType;
+  parent_id: number;
+  content: string;
+  agent_identifier: string;
+  author_name?: string | null;
+  project_id: number;
+}
+
+export interface UpdateNoteInput {
+  id: number;
+  content: string;
+  agent_identifier: string;
+  author_name?: string | null;
+}
+
 // Update types (all fields optional except id)
 export interface UpdateEpicInput {
   id: number;
@@ -173,6 +226,22 @@ export interface TaskFilter {
   story_id?: number;
   status?: EntityStatus;
   assignee?: string;
+}
+
+export interface RelationshipFilter {
+  project_id?: number;
+  source_type?: EntityType;
+  source_id?: number;
+  target_type?: EntityType;
+  target_id?: number;
+  relationship_type?: RelationshipType;
+}
+
+export interface NoteFilter {
+  project_id?: number;
+  parent_type?: EntityType;
+  parent_id?: number;
+  agent_identifier?: string;
 }
 
 // Project context for validation

@@ -263,6 +263,135 @@ app.delete('/api/dependencies/:id', (req, res) => {
   }
 });
 
+// Relationships
+app.get('/api/relationships', (req, res) => {
+  try {
+    const filter: any = {};
+    if (req.query.project_id) filter.project_id = parseInt(req.query.project_id as string);
+    if (req.query.source_type) filter.source_type = req.query.source_type;
+    if (req.query.source_id) filter.source_id = parseInt(req.query.source_id as string);
+    if (req.query.target_type) filter.target_type = req.query.target_type;
+    if (req.query.target_id) filter.target_id = parseInt(req.query.target_id as string);
+    if (req.query.relationship_type) filter.relationship_type = req.query.relationship_type;
+
+    const relationships = db.listRelationships(filter);
+    res.json(relationships);
+  } catch (error) {
+    res.status(500).json({ error: (error as Error).message });
+  }
+});
+
+app.get('/api/relationships/:id', (req, res) => {
+  try {
+    const relationship = db.getRelationship(parseInt(req.params.id));
+    if (!relationship) {
+      return res.status(404).json({ error: 'Relationship not found' });
+    }
+    res.json(relationship);
+  } catch (error) {
+    res.status(500).json({ error: (error as Error).message });
+  }
+});
+
+app.get('/api/relationships/entity/:entityType/:entityId', (req, res) => {
+  try {
+    const { entityType, entityId } = req.params;
+    const relationships = db.getRelationshipsForEntity(
+      entityType as any,
+      parseInt(entityId)
+    );
+    res.json(relationships);
+  } catch (error) {
+    res.status(500).json({ error: (error as Error).message });
+  }
+});
+
+app.post('/api/relationships', (req, res) => {
+  try {
+    const relationship = db.createRelationship(req.body);
+    res.status(201).json(relationship);
+  } catch (error) {
+    res.status(400).json({ error: (error as Error).message });
+  }
+});
+
+app.delete('/api/relationships/:id', (req, res) => {
+  try {
+    db.deleteRelationship(parseInt(req.params.id));
+    res.status(204).send();
+  } catch (error) {
+    res.status(500).json({ error: (error as Error).message });
+  }
+});
+
+// Notes
+app.get('/api/notes', (req, res) => {
+  try {
+    const filter: any = {};
+    if (req.query.project_id) filter.project_id = parseInt(req.query.project_id as string);
+    if (req.query.parent_type) filter.parent_type = req.query.parent_type;
+    if (req.query.parent_id) filter.parent_id = parseInt(req.query.parent_id as string);
+    if (req.query.agent_identifier) filter.agent_identifier = req.query.agent_identifier;
+
+    const notes = db.listNotes(filter);
+    res.json(notes);
+  } catch (error) {
+    res.status(500).json({ error: (error as Error).message });
+  }
+});
+
+app.get('/api/notes/:id', (req, res) => {
+  try {
+    const note = db.getNote(parseInt(req.params.id));
+    if (!note) {
+      return res.status(404).json({ error: 'Note not found' });
+    }
+    res.json(note);
+  } catch (error) {
+    res.status(500).json({ error: (error as Error).message });
+  }
+});
+
+app.get('/api/notes/entity/:entityType/:entityId', (req, res) => {
+  try {
+    const { entityType, entityId } = req.params;
+    const notes = db.getNotesForEntity(
+      entityType as any,
+      parseInt(entityId)
+    );
+    res.json(notes);
+  } catch (error) {
+    res.status(500).json({ error: (error as Error).message });
+  }
+});
+
+app.post('/api/notes', (req, res) => {
+  try {
+    const note = db.createNote(req.body);
+    res.status(201).json(note);
+  } catch (error) {
+    res.status(400).json({ error: (error as Error).message });
+  }
+});
+
+app.patch('/api/notes/:id', (req, res) => {
+  try {
+    const note = db.updateNote({ id: parseInt(req.params.id), ...req.body });
+    res.json(note);
+  } catch (error) {
+    res.status(400).json({ error: (error as Error).message });
+  }
+});
+
+app.delete('/api/notes/:id', (req, res) => {
+  try {
+    db.deleteNote(parseInt(req.params.id));
+    res.status(204).send();
+  } catch (error) {
+    res.status(500).json({ error: (error as Error).message });
+  }
+});
+
 // Graph data
 app.get('/api/graph/dependencies', (req, res) => {
   try {

@@ -7,6 +7,8 @@ import type {
   Story,
   Task,
   Dependency,
+  Relationship,
+  Note,
   StatusTransition,
   SecurityLog,
   CreateProjectInput,
@@ -14,6 +16,9 @@ import type {
   CreateStoryInput,
   CreateTaskInput,
   CreateDependencyInput,
+  CreateRelationshipInput,
+  CreateNoteInput,
+  UpdateNoteInput,
   UpdateProjectInput,
   UpdateEpicInput,
   UpdateStoryInput,
@@ -21,11 +26,15 @@ import type {
   EpicFilter,
   StoryFilter,
   TaskFilter,
+  RelationshipFilter,
+  NoteFilter,
   ProjectContext,
   DependencyGraph,
   StoryNode,
   DependencyEdge,
   HierarchyNode,
+  EntityType,
+  RelationshipType,
 } from './types.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -217,6 +226,50 @@ export class AgileDatabase {
       console.error('[Migration] Adding agent_identifier to security_logs table...');
       this.db.exec('ALTER TABLE security_logs ADD COLUMN agent_identifier TEXT');
     }
+
+    // Migration 5: Migrate dependencies to relationships table
+    const relationshipsTableInfo = this.db.pragma('table_info(relationships)') as Array<{ name: string }>;
+    const dependenciesTableInfo = this.db.pragma('table_info(dependencies)') as Array<{ name: string }>;
+
+    if (relationshipsTableInfo.length > 0 && dependenciesTableInfo.length > 0) {
+      // Check if we have dependencies that haven't been migrated yet
+      const dependencyCount = this.db.prepare('SELECT COUNT(*) as count FROM dependencies').get() as { count: number };
+      const relationshipCount = this.db.prepare(
+        'SELECT COUNT(*) as count FROM relationships WHERE source_type = ? AND target_type = ?'
+      ).get('story', 'story') as { count: number };
+
+      // Only migrate if we have dependencies but fewer relationships than dependencies
+      if (dependencyCount.count > 0 && relationshipCount.count < dependencyCount.count) {
+        console.error(`[Migration] Migrating ${dependencyCount.count} dependencies to relationships table...`);
+
+        // Migrate dependencies to relationships
+        this.db.exec(`
+          INSERT OR IGNORE INTO relationships (
+            source_type, source_id, target_type, target_id,
+            relationship_type, project_id, agent_identifier, created_at, updated_at
+          )
+          SELECT
+            'story' as source_type,
+            d.story_id as source_id,
+            'story' as target_type,
+            d.depends_on_story_id as target_id,
+            d.dependency_type as relationship_type,
+            s.project_id as project_id,
+            COALESCE(s.agent_identifier, 'migration') as agent_identifier,
+            d.created_at as created_at,
+            d.created_at as updated_at
+          FROM dependencies d
+          JOIN stories s ON d.story_id = s.id
+        `);
+
+        const migratedCount = this.db.prepare(
+          'SELECT COUNT(*) as count FROM relationships WHERE source_type = ? AND target_type = ?'
+        ).get('story', 'story') as { count: number };
+
+        console.error(`[Migration] Successfully migrated ${migratedCount.count} dependencies to relationships`);
+        console.error('[Migration] Note: Old dependencies table kept for backward compatibility');
+      }
+    }
   }
 
   private initializeDatabase(): void {
@@ -317,6 +370,54 @@ export class AgileDatabase {
         FOREIGN KEY (depends_on_story_id) REFERENCES stories (id) ON DELETE CASCADE,
         UNIQUE(story_id, depends_on_story_id)
       )
+    `);
+
+    // Create relationships table (polymorphic many-to-many relationships)
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS relationships (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        source_type TEXT NOT NULL,
+        source_id INTEGER NOT NULL,
+        target_type TEXT NOT NULL,
+        target_id INTEGER NOT NULL,
+        relationship_type TEXT NOT NULL,
+        project_id INTEGER NOT NULL,
+        agent_identifier TEXT NOT NULL,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+        FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
+        UNIQUE(source_type, source_id, target_type, target_id, relationship_type)
+      )
+    `);
+
+    // Create indexes for relationships
+    this.db.exec(`
+      CREATE INDEX IF NOT EXISTS idx_relationships_source ON relationships(source_type, source_id);
+      CREATE INDEX IF NOT EXISTS idx_relationships_target ON relationships(target_type, target_id);
+      CREATE INDEX IF NOT EXISTS idx_relationships_project ON relationships(project_id);
+    `);
+
+    // Create notes table (polymorphic notes for any entity)
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS notes (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        parent_type TEXT NOT NULL,
+        parent_id INTEGER NOT NULL,
+        content TEXT NOT NULL,
+        agent_identifier TEXT NOT NULL,
+        author_name TEXT,
+        project_id INTEGER NOT NULL,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+        FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
+      )
+    `);
+
+    // Create indexes for notes
+    this.db.exec(`
+      CREATE INDEX IF NOT EXISTS idx_notes_parent ON notes(parent_type, parent_id);
+      CREATE INDEX IF NOT EXISTS idx_notes_project ON notes(project_id);
+      CREATE INDEX IF NOT EXISTS idx_notes_agent ON notes(agent_identifier);
     `);
 
     // Create status_transitions table
@@ -826,6 +927,225 @@ export class AgileDatabase {
     }
 
     return false;
+  }
+
+  // Relationship operations (polymorphic many-to-many)
+  createRelationship(input: CreateRelationshipInput): Relationship {
+    // Check for circular relationships on dependency types
+    if (input.relationship_type === 'blocks' || input.relationship_type === 'blocked_by' || input.relationship_type === 'depends_on') {
+      if (this.wouldCreateCircularRelationship(
+        input.source_type,
+        input.source_id,
+        input.target_type,
+        input.target_id,
+        input.relationship_type
+      )) {
+        throw new Error('Cannot create relationship: would create a circular dependency');
+      }
+    }
+
+    const stmt = this.db.prepare(`
+      INSERT INTO relationships (
+        source_type, source_id, target_type, target_id,
+        relationship_type, project_id, agent_identifier
+      )
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `);
+    const result = stmt.run(
+      input.source_type,
+      input.source_id,
+      input.target_type,
+      input.target_id,
+      input.relationship_type,
+      input.project_id,
+      input.agent_identifier
+    );
+    return this.getRelationship(result.lastInsertRowid as number)!;
+  }
+
+  getRelationship(id: number): Relationship | null {
+    const stmt = this.db.prepare('SELECT * FROM relationships WHERE id = ?');
+    return stmt.get(id) as Relationship | null;
+  }
+
+  listRelationships(filter?: RelationshipFilter): Relationship[] {
+    let query = 'SELECT * FROM relationships WHERE 1=1';
+    const values: any[] = [];
+
+    if (filter?.project_id !== undefined) {
+      query += ' AND project_id = ?';
+      values.push(filter.project_id);
+    }
+    if (filter?.source_type) {
+      query += ' AND source_type = ?';
+      values.push(filter.source_type);
+    }
+    if (filter?.source_id !== undefined) {
+      query += ' AND source_id = ?';
+      values.push(filter.source_id);
+    }
+    if (filter?.target_type) {
+      query += ' AND target_type = ?';
+      values.push(filter.target_type);
+    }
+    if (filter?.target_id !== undefined) {
+      query += ' AND target_id = ?';
+      values.push(filter.target_id);
+    }
+    if (filter?.relationship_type) {
+      query += ' AND relationship_type = ?';
+      values.push(filter.relationship_type);
+    }
+
+    query += ' ORDER BY created_at DESC';
+
+    const stmt = this.db.prepare(query);
+    return stmt.all(...values) as Relationship[];
+  }
+
+  deleteRelationship(id: number): void {
+    this.db.prepare('DELETE FROM relationships WHERE id = ?').run(id);
+  }
+
+  getRelationshipsForEntity(entityType: EntityType, entityId: number): Relationship[] {
+    const stmt = this.db.prepare(`
+      SELECT * FROM relationships
+      WHERE (source_type = ? AND source_id = ?)
+         OR (target_type = ? AND target_id = ?)
+      ORDER BY created_at DESC
+    `);
+    return stmt.all(entityType, entityId, entityType, entityId) as Relationship[];
+  }
+
+  private wouldCreateCircularRelationship(
+    sourceType: EntityType,
+    sourceId: number,
+    targetType: EntityType,
+    targetId: number,
+    relationshipType: RelationshipType
+  ): boolean {
+    // Only check for circular dependencies on dependency-type relationships
+    if (relationshipType !== 'blocks' && relationshipType !== 'blocked_by' && relationshipType !== 'depends_on') {
+      return false;
+    }
+
+    // BFS to check if target depends on source (directly or transitively)
+    const visited = new Set<string>();
+    const queue: Array<{ type: EntityType; id: number }> = [{ type: targetType, id: targetId }];
+
+    while (queue.length > 0) {
+      const current = queue.shift()!;
+      const key = `${current.type}:${current.id}`;
+
+      if (current.type === sourceType && current.id === sourceId) {
+        return true;
+      }
+      if (visited.has(key)) {
+        continue;
+      }
+      visited.add(key);
+
+      // Find all entities that current depends on
+      const deps = this.db.prepare(`
+        SELECT target_type, target_id
+        FROM relationships
+        WHERE source_type = ? AND source_id = ?
+          AND (relationship_type = 'blocks' OR relationship_type = 'blocked_by' OR relationship_type = 'depends_on')
+      `).all(current.type, current.id) as Array<{ target_type: EntityType; target_id: number }>;
+
+      for (const dep of deps) {
+        queue.push({ type: dep.target_type, id: dep.target_id });
+      }
+    }
+
+    return false;
+  }
+
+  // Note operations (polymorphic notes for any entity)
+  createNote(input: CreateNoteInput): Note {
+    const stmt = this.db.prepare(`
+      INSERT INTO notes (parent_type, parent_id, content, agent_identifier, author_name, project_id)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `);
+    const result = stmt.run(
+      input.parent_type,
+      input.parent_id,
+      input.content,
+      input.agent_identifier,
+      input.author_name ?? null,
+      input.project_id
+    );
+    return this.getNote(result.lastInsertRowid as number)!;
+  }
+
+  getNote(id: number): Note | null {
+    const stmt = this.db.prepare('SELECT * FROM notes WHERE id = ?');
+    return stmt.get(id) as Note | null;
+  }
+
+  listNotes(filter?: NoteFilter): Note[] {
+    let query = 'SELECT * FROM notes WHERE 1=1';
+    const values: any[] = [];
+
+    if (filter?.project_id !== undefined) {
+      query += ' AND project_id = ?';
+      values.push(filter.project_id);
+    }
+    if (filter?.parent_type) {
+      query += ' AND parent_type = ?';
+      values.push(filter.parent_type);
+    }
+    if (filter?.parent_id !== undefined) {
+      query += ' AND parent_id = ?';
+      values.push(filter.parent_id);
+    }
+    if (filter?.agent_identifier) {
+      query += ' AND agent_identifier = ?';
+      values.push(filter.agent_identifier);
+    }
+
+    query += ' ORDER BY created_at DESC';
+
+    const stmt = this.db.prepare(query);
+    return stmt.all(...values) as Note[];
+  }
+
+  updateNote(input: UpdateNoteInput): Note {
+    const updates: string[] = [];
+    const values: any[] = [];
+
+    updates.push('content = ?');
+    values.push(input.content);
+
+    updates.push('agent_identifier = ?');
+    values.push(input.agent_identifier);
+
+    if (input.author_name !== undefined) {
+      updates.push('author_name = ?');
+      values.push(input.author_name);
+    }
+
+    updates.push('updated_at = datetime(\'now\')');
+    values.push(input.id);
+
+    const stmt = this.db.prepare(`
+      UPDATE notes SET ${updates.join(', ')} WHERE id = ?
+    `);
+    stmt.run(...values);
+    return this.getNote(input.id)!;
+  }
+
+  deleteNote(id: number): void {
+    this.db.prepare('DELETE FROM notes WHERE id = ?').run(id);
+  }
+
+  getNotesForEntity(entityType: EntityType, entityId: number): Note[] {
+    const stmt = this.db.prepare(`
+      SELECT * FROM notes
+      WHERE parent_type = ? AND parent_id = ?
+      ORDER BY created_at DESC
+    `);
+    return stmt.all(entityType, entityId) as Note[];
   }
 
   // Status transition validation

@@ -14,6 +14,8 @@ import { handleEpicTools } from './tools/epic-tools.js';
 import { handleStoryTools } from './tools/story-tools.js';
 import { handleTaskTools } from './tools/task-tools.js';
 import { handleDependencyTools } from './tools/dependency-tools.js';
+import { handleRelationshipTools } from './tools/relationship-tools.js';
+import { handleNoteTools } from './tools/note-tools.js';
 import { handleExportTools } from './tools/export-tools.js';
 import { registerResources } from './resources/index.js';
 
@@ -46,6 +48,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     handleStoryTools,
     handleTaskTools,
     handleDependencyTools,
+    handleRelationshipTools,
+    handleNoteTools,
     handleExportTools,
   ];
 
@@ -388,6 +392,141 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
             story_id: { type: 'number', description: 'Filter by story ID (optional)' },
           },
           required: ['project_identifier', 'agent_identifier'],
+        },
+      },
+      // Relationship tools (polymorphic many-to-many)
+      {
+        name: 'create_relationship',
+        description: 'Create a polymorphic relationship between any two entities (project, epic, story, or task)',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            project_identifier: { type: 'string', description: 'Project identifier' },
+            agent_identifier: { type: 'string', description: 'Agent identifier for attribution' },
+            source_type: { type: 'string', enum: ['project', 'epic', 'story', 'task'], description: 'Type of source entity' },
+            source_id: { type: 'number', description: 'ID of source entity' },
+            target_type: { type: 'string', enum: ['project', 'epic', 'story', 'task'], description: 'Type of target entity' },
+            target_id: { type: 'number', description: 'ID of target entity' },
+            relationship_type: { type: 'string', enum: ['blocks', 'blocked_by', 'related_to', 'cloned_from', 'depends_on'], description: 'Type of relationship' },
+          },
+          required: ['project_identifier', 'agent_identifier', 'source_type', 'source_id', 'target_type', 'target_id', 'relationship_type'],
+        },
+      },
+      {
+        name: 'delete_relationship',
+        description: 'Delete a relationship',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            project_identifier: { type: 'string', description: 'Project identifier' },
+            agent_identifier: { type: 'string', description: 'Agent identifier for attribution' },
+            id: { type: 'number', description: 'Relationship ID' },
+          },
+          required: ['project_identifier', 'agent_identifier', 'id'],
+        },
+      },
+      {
+        name: 'list_relationships',
+        description: 'List relationships with optional filters for source, target, or relationship type',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            project_identifier: { type: 'string', description: 'Project identifier' },
+            agent_identifier: { type: 'string', description: 'Agent identifier for attribution' },
+            source_type: { type: 'string', enum: ['project', 'epic', 'story', 'task'], description: 'Filter by source entity type (optional)' },
+            source_id: { type: 'number', description: 'Filter by source entity ID (optional)' },
+            target_type: { type: 'string', enum: ['project', 'epic', 'story', 'task'], description: 'Filter by target entity type (optional)' },
+            target_id: { type: 'number', description: 'Filter by target entity ID (optional)' },
+            relationship_type: { type: 'string', enum: ['blocks', 'blocked_by', 'related_to', 'cloned_from', 'depends_on'], description: 'Filter by relationship type (optional)' },
+          },
+          required: ['project_identifier', 'agent_identifier'],
+        },
+      },
+      {
+        name: 'get_relationships_for_entity',
+        description: 'Get all relationships for a specific entity (as source or target)',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            project_identifier: { type: 'string', description: 'Project identifier' },
+            agent_identifier: { type: 'string', description: 'Agent identifier for attribution' },
+            entity_type: { type: 'string', enum: ['project', 'epic', 'story', 'task'], description: 'Type of entity' },
+            entity_id: { type: 'number', description: 'ID of entity' },
+          },
+          required: ['project_identifier', 'agent_identifier', 'entity_type', 'entity_id'],
+        },
+      },
+      // Note tools (polymorphic notes)
+      {
+        name: 'create_note',
+        description: 'Create a note attached to any entity (project, epic, story, or task). Supports markdown formatting.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            project_identifier: { type: 'string', description: 'Project identifier' },
+            agent_identifier: { type: 'string', description: 'Agent identifier for attribution' },
+            parent_type: { type: 'string', enum: ['project', 'epic', 'story', 'task'], description: 'Type of parent entity' },
+            parent_id: { type: 'number', description: 'ID of parent entity' },
+            content: { type: 'string', description: 'Note content (markdown supported)' },
+            author_name: { type: 'string', description: 'Optional author name (defaults to agent_identifier)' },
+          },
+          required: ['project_identifier', 'agent_identifier', 'parent_type', 'parent_id', 'content'],
+        },
+      },
+      {
+        name: 'update_note',
+        description: 'Update an existing note',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            project_identifier: { type: 'string', description: 'Project identifier' },
+            agent_identifier: { type: 'string', description: 'Agent identifier for attribution' },
+            id: { type: 'number', description: 'Note ID' },
+            content: { type: 'string', description: 'New note content (markdown supported)' },
+            author_name: { type: 'string', description: 'Optional author name' },
+          },
+          required: ['project_identifier', 'agent_identifier', 'id', 'content'],
+        },
+      },
+      {
+        name: 'delete_note',
+        description: 'Delete a note',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            project_identifier: { type: 'string', description: 'Project identifier' },
+            agent_identifier: { type: 'string', description: 'Agent identifier for attribution' },
+            id: { type: 'number', description: 'Note ID' },
+          },
+          required: ['project_identifier', 'agent_identifier', 'id'],
+        },
+      },
+      {
+        name: 'list_notes',
+        description: 'List notes with optional filters for parent entity or agent',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            project_identifier: { type: 'string', description: 'Project identifier' },
+            agent_identifier: { type: 'string', description: 'Agent identifier for attribution' },
+            parent_type: { type: 'string', enum: ['project', 'epic', 'story', 'task'], description: 'Filter by parent entity type (optional)' },
+            parent_id: { type: 'number', description: 'Filter by parent entity ID (optional)' },
+          },
+          required: ['project_identifier', 'agent_identifier'],
+        },
+      },
+      {
+        name: 'get_notes_for_entity',
+        description: 'Get all notes for a specific entity',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            project_identifier: { type: 'string', description: 'Project identifier' },
+            agent_identifier: { type: 'string', description: 'Agent identifier for attribution' },
+            entity_type: { type: 'string', enum: ['project', 'epic', 'story', 'task'], description: 'Type of entity' },
+            entity_id: { type: 'number', description: 'ID of entity' },
+          },
+          required: ['project_identifier', 'agent_identifier', 'entity_type', 'entity_id'],
         },
       },
       // Export tools
