@@ -10,19 +10,24 @@ import ProjectSelector from './components/ProjectSelector';
 function App() {
   const location = useLocation();
   const navigate = useNavigate();
-  const [selectedProjectId, setSelectedProjectId] = useState<number | null>(null);
+
+  // Initialize selectedProjectId from URL immediately
+  const getProjectIdFromPath = (pathname: string): number | null => {
+    const match = pathname.match(/^\/project\/(\d+)/);
+    return match ? parseInt(match[1]) : null;
+  };
+
+  const [selectedProjectId, setSelectedProjectId] = useState<number | null>(() =>
+    getProjectIdFromPath(location.pathname)
+  );
   const [apiConnected, setApiConnected] = useState<boolean>(true);
   const [checkingApi, setCheckingApi] = useState<boolean>(true);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState<boolean>(false);
 
-  // Extract project ID from URL path
+  // Update selectedProjectId when URL changes
   useEffect(() => {
-    const match = location.pathname.match(/^\/project\/(\d+)/);
-    if (match) {
-      setSelectedProjectId(parseInt(match[1]));
-    } else {
-      setSelectedProjectId(null);
-    }
+    const projectId = getProjectIdFromPath(location.pathname);
+    setSelectedProjectId(projectId);
   }, [location.pathname]);
 
   useEffect(() => {
