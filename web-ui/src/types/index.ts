@@ -1,6 +1,8 @@
 export type EntityStatus = 'todo' | 'in_progress' | 'review' | 'done' | 'blocked';
 export type Priority = 'low' | 'medium' | 'high' | 'critical';
 export type DependencyType = 'blocks' | 'blocked_by';
+export type EntityType = 'project' | 'epic' | 'story' | 'task';
+export type RelationshipType = 'blocks' | 'blocked_by' | 'related_to' | 'cloned_from' | 'depends_on';
 
 export interface Epic {
   id: number;
@@ -74,4 +76,29 @@ export interface HierarchyNode {
   title: string;
   status: EntityStatus;
   children?: HierarchyNode[];
+}
+
+export interface Relationship {
+  id: number;
+  source_type: EntityType;
+  source_id: number;
+  target_type: EntityType;
+  target_id: number;
+  relationship_type: RelationshipType;
+  project_id: number;
+  agent_identifier: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface Note {
+  id: number;
+  parent_type: EntityType;
+  parent_id: number;
+  content: string;
+  agent_identifier: string;
+  author_name: string | null;
+  project_id: number;
+  created_at: string;
+  updated_at: string;
 }

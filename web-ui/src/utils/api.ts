@@ -1,4 +1,4 @@
-import type { Epic, Story, Task, Dependency, DependencyGraph, HierarchyNode } from '../types';
+import type { Epic, Story, Task, Dependency, DependencyGraph, HierarchyNode, Relationship, Note, EntityType } from '../types';
 
 const API_BASE = '/api';
 
@@ -100,5 +100,41 @@ export const api = {
       const params = projectId ? `?project_id=${projectId}` : '';
       return fetchJson<HierarchyNode[]>(`/graph/hierarchy${params}`);
     },
+  },
+
+  // Relationships
+  relationships: {
+    list: (filters?: Record<string, any>) => {
+      const params = new URLSearchParams(filters).toString();
+      return fetchJson<Relationship[]>(`/relationships${params ? `?${params}` : ''}`);
+    },
+    get: (id: number) => fetchJson<Relationship>(`/relationships/${id}`),
+    forEntity: (entityType: EntityType, entityId: number) =>
+      fetchJson<Relationship[]>(`/relationships/entity/${entityType}/${entityId}`),
+    create: (data: Partial<Relationship>) => fetchJson<Relationship>('/relationships', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+    delete: (id: number) => fetchJson<void>(`/relationships/${id}`, { method: 'DELETE' }),
+  },
+
+  // Notes
+  notes: {
+    list: (filters?: Record<string, any>) => {
+      const params = new URLSearchParams(filters).toString();
+      return fetchJson<Note[]>(`/notes${params ? `?${params}` : ''}`);
+    },
+    get: (id: number) => fetchJson<Note>(`/notes/${id}`),
+    forEntity: (entityType: EntityType, entityId: number) =>
+      fetchJson<Note[]>(`/notes/entity/${entityType}/${entityId}`),
+    create: (data: Partial<Note>) => fetchJson<Note>('/notes', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+    update: (id: number, data: Partial<Note>) => fetchJson<Note>(`/notes/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    }),
+    delete: (id: number) => fetchJson<void>(`/notes/${id}`, { method: 'DELETE' }),
   },
 };

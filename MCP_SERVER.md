@@ -804,6 +804,233 @@ List dependencies, optionally filtered by story or project.
 
 ---
 
+### Relationship Tools
+
+#### create_relationship
+
+Create a polymorphic relationship between any two entities (project, epic, story, or task).
+
+**Parameters:**
+```typescript
+{
+  project_identifier: string;      // REQUIRED: Project identifier
+  agent_identifier: string;        // REQUIRED: Your agent identifier
+  source_type: string;             // REQUIRED: 'project', 'epic', 'story', or 'task'
+  source_id: number;               // REQUIRED: Source entity ID
+  target_type: string;             // REQUIRED: 'project', 'epic', 'story', or 'task'
+  target_id: number;               // REQUIRED: Target entity ID
+  relationship_type: string;       // REQUIRED: See relationship types below
+}
+```
+
+**Relationship Types:**
+- `blocks` - Source blocks target
+- `blocked_by` - Source is blocked by target
+- `related_to` - General relationship
+- `cloned_from` - Source was cloned from target
+- `depends_on` - Source depends on target
+
+**Example:**
+```
+Tool: create_relationship
+{
+  "project_identifier": "frontend-app",
+  "agent_identifier": "claude",
+  "source_type": "story",
+  "source_id": 5,
+  "target_type": "epic",
+  "target_id": 2,
+  "relationship_type": "related_to"
+}
+```
+
+**Validation:**
+- Both entities must be in the same project
+- Circular dependency detection for 'blocks', 'blocked_by', and 'depends_on' types
+- Prevents duplicate relationships (UNIQUE constraint)
+
+---
+
+#### delete_relationship
+
+Remove a relationship.
+
+**Parameters:**
+```typescript
+{
+  project_identifier: string;  // REQUIRED: Project identifier
+  agent_identifier: string;    // REQUIRED: Your agent identifier
+  id: number;                  // REQUIRED: Relationship ID
+}
+```
+
+---
+
+#### list_relationships
+
+List relationships with optional filters.
+
+**Parameters:**
+```typescript
+{
+  project_identifier: string;      // REQUIRED: Project identifier
+  agent_identifier: string;        // REQUIRED: Your agent identifier
+  source_type?: string;            // Optional: Filter by source entity type
+  source_id?: number;              // Optional: Filter by source entity ID
+  target_type?: string;            // Optional: Filter by target entity type
+  target_id?: number;              // Optional: Filter by target entity ID
+  relationship_type?: string;      // Optional: Filter by relationship type
+}
+```
+
+**Example:**
+```
+Tool: list_relationships
+{
+  "project_identifier": "frontend-app",
+  "agent_identifier": "claude",
+  "source_type": "story",
+  "relationship_type": "blocks"
+}
+```
+
+---
+
+#### get_relationships_for_entity
+
+Get all relationships for a specific entity (as source or target).
+
+**Parameters:**
+```typescript
+{
+  project_identifier: string;  // REQUIRED: Project identifier
+  agent_identifier: string;    // REQUIRED: Your agent identifier
+  entity_type: string;         // REQUIRED: 'project', 'epic', 'story', or 'task'
+  entity_id: number;           // REQUIRED: Entity ID
+}
+```
+
+**Example:**
+```
+Tool: get_relationships_for_entity
+{
+  "project_identifier": "frontend-app",
+  "agent_identifier": "claude",
+  "entity_type": "story",
+  "entity_id": 5
+}
+```
+
+---
+
+### Note Tools
+
+#### create_note
+
+Create a note attached to any entity. Supports markdown formatting.
+
+**Parameters:**
+```typescript
+{
+  project_identifier: string;  // REQUIRED: Project identifier
+  agent_identifier: string;    // REQUIRED: Your agent identifier
+  parent_type: string;         // REQUIRED: 'project', 'epic', 'story', or 'task'
+  parent_id: number;           // REQUIRED: Parent entity ID
+  content: string;             // REQUIRED: Note content (markdown supported)
+  author_name?: string;        // Optional: Author name (defaults to agent_identifier)
+}
+```
+
+**Example:**
+```
+Tool: create_note
+{
+  "project_identifier": "frontend-app",
+  "agent_identifier": "claude",
+  "parent_type": "story",
+  "parent_id": 5,
+  "content": "## Implementation Notes\n\n- Use React hooks\n- Add unit tests\n- Consider edge cases",
+  "author_name": "Claude"
+}
+```
+
+---
+
+#### update_note
+
+Update an existing note.
+
+**Parameters:**
+```typescript
+{
+  project_identifier: string;  // REQUIRED: Project identifier
+  agent_identifier: string;    // REQUIRED: Your agent identifier
+  id: number;                  // REQUIRED: Note ID
+  content: string;             // REQUIRED: New note content (markdown supported)
+  author_name?: string;        // Optional: Update author name
+}
+```
+
+---
+
+#### delete_note
+
+Delete a note.
+
+**Parameters:**
+```typescript
+{
+  project_identifier: string;  // REQUIRED: Project identifier
+  agent_identifier: string;    // REQUIRED: Your agent identifier
+  id: number;                  // REQUIRED: Note ID
+}
+```
+
+---
+
+#### list_notes
+
+List notes with optional filters.
+
+**Parameters:**
+```typescript
+{
+  project_identifier: string;  // REQUIRED: Project identifier
+  agent_identifier: string;    // REQUIRED: Your agent identifier
+  parent_type?: string;        // Optional: Filter by parent entity type
+  parent_id?: number;          // Optional: Filter by parent entity ID
+}
+```
+
+---
+
+#### get_notes_for_entity
+
+Get all notes for a specific entity.
+
+**Parameters:**
+```typescript
+{
+  project_identifier: string;  // REQUIRED: Project identifier
+  agent_identifier: string;    // REQUIRED: Your agent identifier
+  entity_type: string;         // REQUIRED: 'project', 'epic', 'story', or 'task'
+  entity_id: number;           // REQUIRED: Entity ID
+}
+```
+
+**Example:**
+```
+Tool: get_notes_for_entity
+{
+  "project_identifier": "frontend-app",
+  "agent_identifier": "claude",
+  "entity_type": "story",
+  "entity_id": 5
+}
+```
+
+---
+
 ### Export Tools
 
 #### export_backlog
