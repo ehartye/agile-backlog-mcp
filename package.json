@@ -1,0 +1,20 @@
+{
+  "name": "agile-mcp",
+  "version": "1.0.0",
+  "description": "Agile backlog management MCP server with web UI for dependency visualization",
+  "private": true,
+  "workspaces": [
+    "mcp-server",
+    "web-ui",
+    "shared"
+  ],
+  "scripts": {
+    "dev:mcp": "npm run dev --workspace=mcp-server",
+    "dev:web": "npm run dev --workspace=web-ui",
+    "build": "npm run build --workspaces",
+    "clean": "rm -rf node_modules mcp-server/node_modules web-ui/node_modules shared/node_modules"
+  },
+  "keywords": ["mcp", "agile", "backlog", "project-management"],
+  "author": "",
+  "license": "MIT"
+}

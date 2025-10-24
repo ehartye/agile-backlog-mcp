@@ -1,0 +1,215 @@
+// Core entity types
+export type EntityStatus = 'todo' | 'in_progress' | 'review' | 'done' | 'blocked';
+export type Priority = 'low' | 'medium' | 'high' | 'critical';
+export type DependencyType = 'blocks' | 'blocked_by';
+
+export interface Project {
+  id: number;
+  identifier: string;
+  name: string;
+  description: string;
+  created_at: string;
+  updated_at: string;
+  last_accessed_at: string;
+}
+
+export interface Epic {
+  id: number;
+  project_id: number;
+  title: string;
+  description: string;
+  status: EntityStatus;
+  created_at: string;
+  updated_at: string;
+  agent_identifier: string | null;
+  last_modified_by: string | null;
+}
+
+export interface Story {
+  id: number;
+  project_id: number;
+  epic_id: number | null;
+  title: string;
+  description: string;
+  status: EntityStatus;
+  priority: Priority;
+  points: number | null;
+  created_at: string;
+  updated_at: string;
+  agent_identifier: string | null;
+  last_modified_by: string | null;
+}
+
+export interface Task {
+  id: number;
+  story_id: number;
+  title: string;
+  description: string;
+  status: EntityStatus;
+  assignee: string | null;
+  created_at: string;
+  updated_at: string;
+  agent_identifier: string | null;
+  last_modified_by: string | null;
+}
+
+export interface Dependency {
+  id: number;
+  story_id: number;
+  depends_on_story_id: number;
+  dependency_type: DependencyType;
+  created_at: string;
+}
+
+export interface StatusTransition {
+  id: number;
+  entity_type: 'epic' | 'story' | 'task';
+  from_status: EntityStatus;
+  to_status: EntityStatus;
+  allowed: boolean;
+}
+
+export interface SecurityLog {
+  id: number;
+  event_type: 'unauthorized_access' | 'project_violation' | 'conflict_detected';
+  project_id: number | null;
+  agent_identifier: string | null;
+  attempted_path: string;
+  entity_type: string;
+  entity_id: number | null;
+  message: string;
+  created_at: string;
+}
+
+// Input types for creation (without auto-generated fields)
+export interface CreateProjectInput {
+  identifier: string;
+  name: string;
+  description: string;
+}
+
+export interface CreateEpicInput {
+  project_id: number;
+  title: string;
+  description: string;
+  status?: EntityStatus;
+}
+
+export interface CreateStoryInput {
+  project_id: number;
+  epic_id?: number | null;
+  title: string;
+  description: string;
+  status?: EntityStatus;
+  priority?: Priority;
+  points?: number | null;
+}
+
+export interface CreateTaskInput {
+  story_id: number;
+  title: string;
+  description: string;
+  status?: EntityStatus;
+  assignee?: string | null;
+}
+
+export interface CreateDependencyInput {
+  story_id: number;
+  depends_on_story_id: number;
+  dependency_type: DependencyType;
+}
+
+// Update types (all fields optional except id)
+export interface UpdateEpicInput {
+  id: number;
+  title?: string;
+  description?: string;
+  status?: EntityStatus;
+}
+
+export interface UpdateStoryInput {
+  id: number;
+  epic_id?: number | null;
+  title?: string;
+  description?: string;
+  status?: EntityStatus;
+  priority?: Priority;
+  points?: number | null;
+}
+
+export interface UpdateTaskInput {
+  id: number;
+  story_id?: number;
+  title?: string;
+  description?: string;
+  status?: EntityStatus;
+  assignee?: string | null;
+}
+
+// Update types for projects
+export interface UpdateProjectInput {
+  id: number;
+  identifier?: string;
+  name?: string;
+  description?: string;
+}
+
+// Query filters
+export interface EpicFilter {
+  project_id?: number;
+  status?: EntityStatus;
+}
+
+export interface StoryFilter {
+  project_id?: number;
+  epic_id?: number;
+  status?: EntityStatus;
+  priority?: Priority;
+  has_dependencies?: boolean;
+}
+
+export interface TaskFilter {
+  project_id?: number;
+  story_id?: number;
+  status?: EntityStatus;
+  assignee?: string;
+}
+
+// Project context for validation
+export interface ProjectContext {
+  project_identifier: string;
+  project_id: number;
+  project_name: string;
+  agent_identifier: string;
+  modified_by: string;
+}
+
+// Graph data structures for UI
+export interface StoryNode {
+  id: number;
+  title: string;
+  status: EntityStatus;
+  priority: Priority;
+  epic_id: number | null;
+  dependencies: number[];
+  dependents: number[];
+}
+
+export interface DependencyEdge {
+  source: number;
+  target: number;
+  type: DependencyType;
+}
+
+export interface DependencyGraph {
+  nodes: StoryNode[];
+  edges: DependencyEdge[];
+}
+
+export interface HierarchyNode {
+  id: number;
+  type: 'epic' | 'story' | 'task';
+  title: string;
+  status: EntityStatus;
+  children?: HierarchyNode[];
+}
