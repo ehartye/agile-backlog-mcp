@@ -4,6 +4,7 @@ export type Priority = 'low' | 'medium' | 'high' | 'critical';
 export type DependencyType = 'blocks' | 'blocked_by';
 export type EntityType = 'project' | 'epic' | 'story' | 'task';
 export type RelationshipType = 'blocks' | 'blocked_by' | 'related_to' | 'cloned_from' | 'depends_on';
+export type SprintStatus = 'planning' | 'active' | 'completed' | 'cancelled';
 
 export interface Project {
   id: number;
@@ -109,6 +110,39 @@ export interface SecurityLog {
   created_at: string;
 }
 
+export interface Sprint {
+  id: number;
+  project_id: number;
+  name: string;
+  goal: string | null;
+  start_date: string;
+  end_date: string;
+  capacity_points: number | null;
+  status: SprintStatus;
+  created_at: string;
+  updated_at: string;
+  agent_identifier: string | null;
+}
+
+export interface SprintStory {
+  id: number;
+  sprint_id: number;
+  story_id: number;
+  added_at: string;
+  added_by: string | null;
+}
+
+export interface SprintSnapshot {
+  id: number;
+  sprint_id: number;
+  snapshot_date: string;
+  remaining_points: number;
+  completed_points: number;
+  added_points: number;
+  removed_points: number;
+  created_at: string;
+}
+
 // Input types for creation (without auto-generated fields)
 export interface CreateProjectInput {
   identifier: string;
@@ -174,6 +208,16 @@ export interface UpdateNoteInput {
   author_name?: string | null;
 }
 
+export interface CreateSprintInput {
+  project_id: number;
+  name: string;
+  goal?: string | null;
+  start_date: string;
+  end_date: string;
+  capacity_points?: number | null;
+  status?: SprintStatus;
+}
+
 // Update types (all fields optional except id)
 export interface UpdateEpicInput {
   id: number;
@@ -208,6 +252,16 @@ export interface UpdateProjectInput {
   identifier?: string;
   name?: string;
   description?: string;
+}
+
+export interface UpdateSprintInput {
+  id: number;
+  name?: string;
+  goal?: string | null;
+  start_date?: string;
+  end_date?: string;
+  capacity_points?: number | null;
+  status?: SprintStatus;
 }
 
 // Query filters
@@ -245,6 +299,11 @@ export interface NoteFilter {
   parent_type?: EntityType;
   parent_id?: number;
   agent_identifier?: string;
+}
+
+export interface SprintFilter {
+  project_id?: number;
+  status?: SprintStatus;
 }
 
 // Project context for validation

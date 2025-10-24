@@ -9,6 +9,9 @@ import type {
   Dependency,
   Relationship,
   Note,
+  Sprint,
+  SprintStory,
+  SprintSnapshot,
   StatusTransition,
   SecurityLog,
   CreateProjectInput,
@@ -18,16 +21,19 @@ import type {
   CreateDependencyInput,
   CreateRelationshipInput,
   CreateNoteInput,
+  CreateSprintInput,
   UpdateNoteInput,
   UpdateProjectInput,
   UpdateEpicInput,
   UpdateStoryInput,
   UpdateTaskInput,
+  UpdateSprintInput,
   EpicFilter,
   StoryFilter,
   TaskFilter,
   RelationshipFilter,
   NoteFilter,
+  SprintFilter,
   ProjectContext,
   DependencyGraph,
   StoryNode,
@@ -428,6 +434,63 @@ export class AgileDatabase {
       CREATE INDEX IF NOT EXISTS idx_notes_parent ON notes(parent_type, parent_id);
       CREATE INDEX IF NOT EXISTS idx_notes_project ON notes(project_id);
       CREATE INDEX IF NOT EXISTS idx_notes_agent ON notes(agent_identifier);
+    `);
+
+    // Create sprints table
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS sprints (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        project_id INTEGER NOT NULL,
+        name TEXT NOT NULL,
+        goal TEXT,
+        start_date TEXT NOT NULL,
+        end_date TEXT NOT NULL,
+        capacity_points INTEGER,
+        status TEXT NOT NULL DEFAULT 'planning',
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        agent_identifier TEXT,
+        FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_sprints_project ON sprints(project_id);
+      CREATE INDEX IF NOT EXISTS idx_sprints_status ON sprints(status);
+    `);
+
+    // Create sprint_stories junction table
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS sprint_stories (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        sprint_id INTEGER NOT NULL,
+        story_id INTEGER NOT NULL,
+        added_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        added_by TEXT,
+        FOREIGN KEY (sprint_id) REFERENCES sprints(id) ON DELETE CASCADE,
+        FOREIGN KEY (story_id) REFERENCES stories(id) ON DELETE CASCADE,
+        UNIQUE(sprint_id, story_id)
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_sprint_stories_sprint ON sprint_stories(sprint_id);
+      CREATE INDEX IF NOT EXISTS idx_sprint_stories_story ON sprint_stories(story_id);
+    `);
+
+    // Create sprint_snapshots table for burndown tracking
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS sprint_snapshots (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        sprint_id INTEGER NOT NULL,
+        snapshot_date TEXT NOT NULL,
+        remaining_points INTEGER NOT NULL,
+        completed_points INTEGER NOT NULL,
+        added_points INTEGER NOT NULL DEFAULT 0,
+        removed_points INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (sprint_id) REFERENCES sprints(id) ON DELETE CASCADE,
+        UNIQUE(sprint_id, snapshot_date)
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_sprint_snapshots_sprint ON sprint_snapshots(sprint_id);
+      CREATE INDEX IF NOT EXISTS idx_sprint_snapshots_date ON sprint_snapshots(snapshot_date);
     `);
 
     // Create status_transitions table
@@ -1161,6 +1224,252 @@ export class AgileDatabase {
       ORDER BY created_at DESC
     `);
     return stmt.all(entityType, entityId) as Note[];
+  }
+
+  // Sprint methods
+  createSprint(input: CreateSprintInput, agentIdentifier?: string): Sprint {
+    const stmt = this.db.prepare(`
+      INSERT INTO sprints (project_id, name, goal, start_date, end_date, capacity_points, status, agent_identifier)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+    const result = stmt.run(
+      input.project_id,
+      input.name,
+      input.goal ?? null,
+      input.start_date,
+      input.end_date,
+      input.capacity_points ?? null,
+      input.status || 'planning',
+      agentIdentifier || null
+    );
+    return this.getSprint(result.lastInsertRowid as number)!;
+  }
+
+  getSprint(id: number): Sprint | null {
+    const stmt = this.db.prepare('SELECT * FROM sprints WHERE id = ?');
+    return stmt.get(id) as Sprint | null;
+  }
+
+  listSprints(filter?: SprintFilter): Sprint[] {
+    let query = 'SELECT * FROM sprints WHERE 1=1';
+    const params: any[] = [];
+
+    if (filter?.project_id) {
+      query += ' AND project_id = ?';
+      params.push(filter.project_id);
+    }
+
+    if (filter?.status) {
+      query += ' AND status = ?';
+      params.push(filter.status);
+    }
+
+    query += ' ORDER BY start_date DESC';
+
+    const stmt = this.db.prepare(query);
+    return stmt.all(...params) as Sprint[];
+  }
+
+  updateSprint(input: UpdateSprintInput, agentIdentifier?: string): Sprint {
+    const current = this.getSprint(input.id);
+    if (!current) {
+      throw new Error(`Sprint ${input.id} not found`);
+    }
+
+    const updates: string[] = [];
+    const params: any[] = [];
+
+    if (input.name !== undefined) {
+      updates.push('name = ?');
+      params.push(input.name);
+    }
+
+    if (input.goal !== undefined) {
+      updates.push('goal = ?');
+      params.push(input.goal);
+    }
+
+    if (input.start_date !== undefined) {
+      updates.push('start_date = ?');
+      params.push(input.start_date);
+    }
+
+    if (input.end_date !== undefined) {
+      updates.push('end_date = ?');
+      params.push(input.end_date);
+    }
+
+    if (input.capacity_points !== undefined) {
+      updates.push('capacity_points = ?');
+      params.push(input.capacity_points);
+    }
+
+    if (input.status !== undefined) {
+      updates.push('status = ?');
+      params.push(input.status);
+    }
+
+    updates.push('updated_at = CURRENT_TIMESTAMP');
+
+    if (agentIdentifier) {
+      updates.push('agent_identifier = ?');
+      params.push(agentIdentifier);
+    }
+
+    params.push(input.id);
+
+    const stmt = this.db.prepare(`
+      UPDATE sprints
+      SET ${updates.join(', ')}
+      WHERE id = ?
+    `);
+    stmt.run(...params);
+
+    return this.getSprint(input.id)!;
+  }
+
+  deleteSprint(id: number): void {
+    this.db.prepare('DELETE FROM sprints WHERE id = ?').run(id);
+  }
+
+  // Sprint-Story association methods
+  addStoryToSprint(sprintId: number, storyId: number, addedBy?: string): SprintStory {
+    const stmt = this.db.prepare(`
+      INSERT INTO sprint_stories (sprint_id, story_id, added_by)
+      VALUES (?, ?, ?)
+    `);
+    const result = stmt.run(sprintId, storyId, addedBy || null);
+
+    const getSt = this.db.prepare('SELECT * FROM sprint_stories WHERE id = ?');
+    return getSt.get(result.lastInsertRowid) as SprintStory;
+  }
+
+  removeStoryFromSprint(sprintId: number, storyId: number): void {
+    this.db.prepare(`
+      DELETE FROM sprint_stories
+      WHERE sprint_id = ? AND story_id = ?
+    `).run(sprintId, storyId);
+  }
+
+  getSprintStories(sprintId: number): Story[] {
+    const stmt = this.db.prepare(`
+      SELECT s.* FROM stories s
+      INNER JOIN sprint_stories ss ON s.id = ss.story_id
+      WHERE ss.sprint_id = ?
+      ORDER BY ss.added_at
+    `);
+    return stmt.all(sprintId) as Story[];
+  }
+
+  getStoryCurrentSprint(storyId: number): Sprint | null {
+    const stmt = this.db.prepare(`
+      SELECT spr.* FROM sprints spr
+      INNER JOIN sprint_stories ss ON spr.id = ss.sprint_id
+      WHERE ss.story_id = ? AND spr.status IN ('planning', 'active')
+      ORDER BY spr.start_date DESC
+      LIMIT 1
+    `);
+    return stmt.get(storyId) as Sprint | null;
+  }
+
+  // Sprint snapshot methods for burndown tracking
+  createSprintSnapshot(sprintId: number, date?: string): SprintSnapshot {
+    const snapshotDate = date || new Date().toISOString().split('T')[0];
+
+    // Calculate current metrics
+    const stories = this.getSprintStories(sprintId);
+    let completedPoints = 0;
+    let remainingPoints = 0;
+
+    for (const story of stories) {
+      const points = story.points || 0;
+      if (story.status === 'done') {
+        completedPoints += points;
+      } else {
+        remainingPoints += points;
+      }
+    }
+
+    // Check if snapshot already exists for this date
+    const existing = this.db.prepare(`
+      SELECT * FROM sprint_snapshots
+      WHERE sprint_id = ? AND snapshot_date = ?
+    `).get(sprintId, snapshotDate) as SprintSnapshot | undefined;
+
+    if (existing) {
+      // Update existing snapshot
+      this.db.prepare(`
+        UPDATE sprint_snapshots
+        SET remaining_points = ?, completed_points = ?
+        WHERE id = ?
+      `).run(remainingPoints, completedPoints, existing.id);
+      return this.db.prepare('SELECT * FROM sprint_snapshots WHERE id = ?').get(existing.id) as SprintSnapshot;
+    } else {
+      // Create new snapshot
+      const stmt = this.db.prepare(`
+        INSERT INTO sprint_snapshots (sprint_id, snapshot_date, remaining_points, completed_points, added_points, removed_points)
+        VALUES (?, ?, ?, ?, 0, 0)
+      `);
+      const result = stmt.run(sprintId, snapshotDate, remainingPoints, completedPoints);
+      return this.db.prepare('SELECT * FROM sprint_snapshots WHERE id = ?').get(result.lastInsertRowid) as SprintSnapshot;
+    }
+  }
+
+  getSprintSnapshots(sprintId: number): SprintSnapshot[] {
+    const stmt = this.db.prepare(`
+      SELECT * FROM sprint_snapshots
+      WHERE sprint_id = ?
+      ORDER BY snapshot_date ASC
+    `);
+    return stmt.all(sprintId) as SprintSnapshot[];
+  }
+
+  calculateSprintCapacity(sprintId: number): { capacity: number | null; committed: number; completed: number; remaining: number } {
+    const sprint = this.getSprint(sprintId);
+    if (!sprint) {
+      throw new Error(`Sprint ${sprintId} not found`);
+    }
+
+    const stories = this.getSprintStories(sprintId);
+    let committedPoints = 0;
+    let completedPoints = 0;
+    let remainingPoints = 0;
+
+    for (const story of stories) {
+      const points = story.points || 0;
+      committedPoints += points;
+      if (story.status === 'done') {
+        completedPoints += points;
+      } else {
+        remainingPoints += points;
+      }
+    }
+
+    return {
+      capacity: sprint.capacity_points,
+      committed: committedPoints,
+      completed: completedPoints,
+      remaining: remainingPoints,
+    };
+  }
+
+  calculateVelocity(projectId: number, sprintCount: number = 3): number[] {
+    const sprints = this.listSprints({ project_id: projectId, status: 'completed' });
+    const recentSprints = sprints.slice(0, sprintCount);
+
+    const velocities: number[] = [];
+    for (const sprint of recentSprints) {
+      const stories = this.getSprintStories(sprint.id);
+      let completedPoints = 0;
+      for (const story of stories) {
+        if (story.status === 'done') {
+          completedPoints += story.points || 0;
+        }
+      }
+      velocities.push(completedPoints);
+    }
+
+    return velocities;
   }
 
   // Status transition validation

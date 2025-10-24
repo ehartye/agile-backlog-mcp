@@ -17,6 +17,7 @@ import { handleDependencyTools } from './tools/dependency-tools.js';
 import { handleRelationshipTools } from './tools/relationship-tools.js';
 import { handleNoteTools } from './tools/note-tools.js';
 import { handleExportTools } from './tools/export-tools.js';
+import { handleSprintTools } from './tools/sprint-tools.js';
 import { registerResources } from './resources/index.js';
 
 const db = new AgileDatabase();
@@ -51,6 +52,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     handleRelationshipTools,
     handleNoteTools,
     handleExportTools,
+    handleSprintTools,
   ];
 
   for (const handler of handlers) {
@@ -543,6 +545,177 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
             output_dir: { type: 'string', description: 'Output directory path (default: .agile-backlog)' },
           },
           required: ['project_identifier', 'agent_identifier'],
+        },
+      },
+      // Sprint tools
+      {
+        name: 'create_sprint',
+        description: 'Create a new sprint/iteration for the project',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            project_identifier: { type: 'string', description: 'Project identifier' },
+            agent_identifier: { type: 'string', description: 'Agent identifier for attribution' },
+            name: { type: 'string', description: 'Sprint name (e.g., "Sprint 23", "Q1 Iteration 1")' },
+            goal: { type: 'string', description: 'Sprint goal or objective (optional)' },
+            start_date: { type: 'string', description: 'Start date (YYYY-MM-DD format)' },
+            end_date: { type: 'string', description: 'End date (YYYY-MM-DD format)' },
+            capacity_points: { type: 'number', description: 'Team capacity in story points (optional)' },
+            status: { type: 'string', enum: ['planning', 'active', 'completed', 'cancelled'], description: 'Initial status (default: planning)' },
+          },
+          required: ['project_identifier', 'agent_identifier', 'name', 'start_date', 'end_date'],
+        },
+      },
+      {
+        name: 'list_sprints',
+        description: 'List all sprints for the project',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            project_identifier: { type: 'string', description: 'Project identifier' },
+            agent_identifier: { type: 'string', description: 'Agent identifier for attribution' },
+            status: { type: 'string', enum: ['planning', 'active', 'completed', 'cancelled'], description: 'Filter by status (optional)' },
+          },
+          required: ['project_identifier', 'agent_identifier'],
+        },
+      },
+      {
+        name: 'get_sprint',
+        description: 'Get detailed information about a sprint including stories and capacity metrics',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            project_identifier: { type: 'string', description: 'Project identifier' },
+            agent_identifier: { type: 'string', description: 'Agent identifier for attribution' },
+            sprint_id: { type: 'number', description: 'Sprint ID' },
+          },
+          required: ['project_identifier', 'agent_identifier', 'sprint_id'],
+        },
+      },
+      {
+        name: 'update_sprint',
+        description: 'Update sprint details',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            project_identifier: { type: 'string', description: 'Project identifier' },
+            agent_identifier: { type: 'string', description: 'Agent identifier for attribution' },
+            sprint_id: { type: 'number', description: 'Sprint ID' },
+            name: { type: 'string', description: 'New sprint name (optional)' },
+            goal: { type: 'string', description: 'New sprint goal (optional)' },
+            start_date: { type: 'string', description: 'New start date (optional)' },
+            end_date: { type: 'string', description: 'New end date (optional)' },
+            capacity_points: { type: 'number', description: 'New capacity (optional)' },
+            status: { type: 'string', enum: ['planning', 'active', 'completed', 'cancelled'], description: 'New status (optional)' },
+          },
+          required: ['project_identifier', 'agent_identifier', 'sprint_id'],
+        },
+      },
+      {
+        name: 'delete_sprint',
+        description: 'Delete a sprint (only allowed if status is planning)',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            project_identifier: { type: 'string', description: 'Project identifier' },
+            agent_identifier: { type: 'string', description: 'Agent identifier for attribution' },
+            sprint_id: { type: 'number', description: 'Sprint ID' },
+          },
+          required: ['project_identifier', 'agent_identifier', 'sprint_id'],
+        },
+      },
+      {
+        name: 'add_story_to_sprint',
+        description: 'Add a story to a sprint for planning',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            project_identifier: { type: 'string', description: 'Project identifier' },
+            agent_identifier: { type: 'string', description: 'Agent identifier for attribution' },
+            sprint_id: { type: 'number', description: 'Sprint ID' },
+            story_id: { type: 'number', description: 'Story ID to add' },
+          },
+          required: ['project_identifier', 'agent_identifier', 'sprint_id', 'story_id'],
+        },
+      },
+      {
+        name: 'remove_story_from_sprint',
+        description: 'Remove a story from a sprint',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            project_identifier: { type: 'string', description: 'Project identifier' },
+            agent_identifier: { type: 'string', description: 'Agent identifier for attribution' },
+            sprint_id: { type: 'number', description: 'Sprint ID' },
+            story_id: { type: 'number', description: 'Story ID to remove' },
+          },
+          required: ['project_identifier', 'agent_identifier', 'sprint_id', 'story_id'],
+        },
+      },
+      {
+        name: 'start_sprint',
+        description: 'Start a sprint (transition from planning to active status)',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            project_identifier: { type: 'string', description: 'Project identifier' },
+            agent_identifier: { type: 'string', description: 'Agent identifier for attribution' },
+            sprint_id: { type: 'number', description: 'Sprint ID' },
+          },
+          required: ['project_identifier', 'agent_identifier', 'sprint_id'],
+        },
+      },
+      {
+        name: 'complete_sprint',
+        description: 'Complete a sprint and generate final report',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            project_identifier: { type: 'string', description: 'Project identifier' },
+            agent_identifier: { type: 'string', description: 'Agent identifier for attribution' },
+            sprint_id: { type: 'number', description: 'Sprint ID' },
+          },
+          required: ['project_identifier', 'agent_identifier', 'sprint_id'],
+        },
+      },
+      {
+        name: 'get_sprint_burndown',
+        description: 'Get burndown chart data for a sprint including snapshots and ideal burndown line',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            project_identifier: { type: 'string', description: 'Project identifier' },
+            agent_identifier: { type: 'string', description: 'Agent identifier for attribution' },
+            sprint_id: { type: 'number', description: 'Sprint ID' },
+          },
+          required: ['project_identifier', 'agent_identifier', 'sprint_id'],
+        },
+      },
+      {
+        name: 'get_velocity_report',
+        description: 'Calculate team velocity based on completed sprints',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            project_identifier: { type: 'string', description: 'Project identifier' },
+            agent_identifier: { type: 'string', description: 'Agent identifier for attribution' },
+            sprint_count: { type: 'number', description: 'Number of recent sprints to analyze (default: 3)' },
+          },
+          required: ['project_identifier', 'agent_identifier'],
+        },
+      },
+      {
+        name: 'create_daily_snapshot',
+        description: 'Manually create a daily snapshot for burndown tracking',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            project_identifier: { type: 'string', description: 'Project identifier' },
+            agent_identifier: { type: 'string', description: 'Agent identifier for attribution' },
+            sprint_id: { type: 'number', description: 'Sprint ID' },
+            date: { type: 'string', description: 'Snapshot date (YYYY-MM-DD format, defaults to today)' },
+          },
+          required: ['project_identifier', 'agent_identifier', 'sprint_id'],
         },
       },
     ],
