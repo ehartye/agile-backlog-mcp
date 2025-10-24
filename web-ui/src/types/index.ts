@@ -17,6 +17,7 @@ export interface Epic {
 
 export interface Story {
   id: number;
+  project_id: number;
   epic_id: number | null;
   title: string;
   description: string;

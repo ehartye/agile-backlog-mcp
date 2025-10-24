@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { Plus, Edit, Trash, ChevronDown, ChevronUp } from 'lucide-react';
 import { api } from '../utils/api';
 import type { Epic, Story, EntityStatus, Priority } from '../types';
@@ -206,9 +207,12 @@ export default function BacklogListView({ projectId }: BacklogListViewProps) {
                 <div className="flex items-start justify-between gap-2">
                   <div className="flex-1 min-w-0">
                     <div className="flex flex-wrap items-center gap-2 mb-2">
-                      <h3 className="text-base md:text-lg font-semibold text-gray-800 break-words">
+                      <Link
+                        to={`/story/${story.id}`}
+                        className="text-base md:text-lg font-semibold text-gray-800 hover:text-blue-600 break-words"
+                      >
                         {story.title}
-                      </h3>
+                      </Link>
                       <span className={`px-2 py-1 rounded text-xs whitespace-nowrap ${statusColors[story.status]}`}>
                         {story.status.replace('_', ' ')}
                       </span>
@@ -231,13 +235,6 @@ export default function BacklogListView({ projectId }: BacklogListViewProps) {
                   </div>
                   <div className="flex flex-col sm:flex-row gap-1 sm:gap-2 shrink-0">
                     <button
-                      onClick={() => setExpandedStoryId(expandedStoryId === story.id ? null : story.id)}
-                      className="p-2 text-gray-600 hover:bg-gray-50 rounded"
-                      title={expandedStoryId === story.id ? "Hide details" : "View details"}
-                    >
-                      {expandedStoryId === story.id ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-                    </button>
-                    <button
                       onClick={() => handleEditStory(story)}
                       className="p-2 text-blue-600 hover:bg-blue-50 rounded"
                       title="Edit story"
@@ -253,6 +250,24 @@ export default function BacklogListView({ projectId }: BacklogListViewProps) {
                     </button>
                   </div>
                 </div>
+
+                {/* Expand/Collapse Button */}
+                <button
+                  onClick={() => setExpandedStoryId(expandedStoryId === story.id ? null : story.id)}
+                  className="w-full mt-3 py-2 text-sm text-gray-600 hover:bg-gray-50 rounded border border-gray-200 flex items-center justify-center gap-2"
+                >
+                  {expandedStoryId === story.id ? (
+                    <>
+                      <ChevronUp size={16} />
+                      Hide Details
+                    </>
+                  ) : (
+                    <>
+                      <ChevronDown size={16} />
+                      View Details
+                    </>
+                  )}
+                </button>
 
                 {/* Expandable Details Section */}
                 {expandedStoryId === story.id && (

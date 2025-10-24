@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import DependencyGraphView from './components/DependencyGraphView';
 import HierarchyTreeView from './components/HierarchyTreeView';
 import BacklogListView from './components/BacklogListView';
+import StoryDetailView from './components/StoryDetailView';
 import ProjectSelector from './components/ProjectSelector';
 
 function App() {
@@ -149,6 +150,7 @@ function App() {
         <main className="flex-1 overflow-hidden w-full min-w-0">
           <Routes>
             <Route path="/" element={<BacklogListView projectId={selectedProjectId} />} />
+            <Route path="/story/:id" element={<StoryDetailView />} />
             <Route path="/dag" element={<DependencyGraphView projectId={selectedProjectId} />} />
             <Route path="/tree" element={<HierarchyTreeView projectId={selectedProjectId} />} />
           </Routes>

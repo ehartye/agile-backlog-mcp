@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { Link2, Plus, Trash2 } from 'lucide-react';
 import { api } from '../utils/api';
 import type { Relationship, EntityType, RelationshipType } from '../types';
@@ -24,6 +25,12 @@ const ENTITY_TYPES: { value: EntityType; label: string }[] = [
   { value: 'task', label: 'Task' },
 ];
 
+interface SearchResult {
+  id: number;
+  title: string;
+  type: EntityType;
+}
+
 export default function RelationshipManager({ entityType, entityId, projectId }: RelationshipManagerProps) {
   const [relationships, setRelationships] = useState<Relationship[]>([]);
   const [showForm, setShowForm] = useState(false);
@@ -33,10 +40,22 @@ export default function RelationshipManager({ entityType, entityId, projectId }:
     target_id: 0,
     relationship_type: 'related_to' as RelationshipType,
   });
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
+  const [selectedEntity, setSelectedEntity] = useState<SearchResult | null>(null);
+  const [showDropdown, setShowDropdown] = useState(false);
 
   useEffect(() => {
     loadRelationships();
   }, [entityType, entityId]);
+
+  useEffect(() => {
+    if (searchQuery.length > 0) {
+      searchEntities();
+    } else {
+      setSearchResults([]);
+    }
+  }, [searchQuery, formData.target_type, projectId]);
 
   const loadRelationships = async () => {
     try {
@@ -50,11 +69,38 @@ export default function RelationshipManager({ entityType, entityId, projectId }:
     }
   };
 
+  const searchEntities = async () => {
+    try {
+      let results: SearchResult[] = [];
+
+      if (formData.target_type === 'epic') {
+        const epics = await api.epics.list({ project_id: projectId });
+        results = epics
+          .filter(e => e.title.toLowerCase().includes(searchQuery.toLowerCase()))
+          .map(e => ({ id: e.id, title: e.title, type: 'epic' as EntityType }));
+      } else if (formData.target_type === 'story') {
+        const stories = await api.stories.list({ project_id: projectId });
+        results = stories
+          .filter(s => s.title.toLowerCase().includes(searchQuery.toLowerCase()))
+          .map(s => ({ id: s.id, title: s.title, type: 'story' as EntityType }));
+      } else if (formData.target_type === 'task') {
+        const tasks = await api.tasks.list({ project_id: projectId });
+        results = tasks
+          .filter(t => t.title.toLowerCase().includes(searchQuery.toLowerCase()))
+          .map(t => ({ id: t.id, title: t.title, type: 'task' as EntityType }));
+      }
+
+      setSearchResults(results.slice(0, 10)); // Limit to 10 results
+    } catch (error) {
+      console.error('Failed to search entities:', error);
+    }
+  };
+
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!formData.target_id) {
-      alert('Please enter a valid target ID');
+    if (!selectedEntity) {
+      alert('Please select an entity');
       return;
     }
 
@@ -63,7 +109,7 @@ export default function RelationshipManager({ entityType, entityId, projectId }:
         source_type: entityType,
         source_id: entityId,
         target_type: formData.target_type,
-        target_id: formData.target_id,
+        target_id: selectedEntity.id,
         relationship_type: formData.relationship_type,
         project_id: projectId,
         agent_identifier: 'web-ui',
@@ -75,10 +121,20 @@ export default function RelationshipManager({ entityType, entityId, projectId }:
         target_id: 0,
         relationship_type: 'related_to',
       });
+      setSelectedEntity(null);
+      setSearchQuery('');
+      setSearchResults([]);
       loadRelationships();
     } catch (error) {
       alert(`Failed to create relationship: ${(error as Error).message}`);
     }
+  };
+
+  const handleSelectEntity = (entity: SearchResult) => {
+    setSelectedEntity(entity);
+    setSearchQuery(entity.title);
+    setShowDropdown(false);
+    setFormData({ ...formData, target_id: entity.id });
   };
 
   const handleDelete = async (id: number) => {
@@ -169,16 +225,41 @@ export default function RelationshipManager({ entityType, entityId, projectId }:
               </select>
             </div>
 
-            <div>
-              <label className="block text-sm font-medium mb-1">Target ID</label>
+            <div className="relative">
+              <label className="block text-sm font-medium mb-1">Search Entity</label>
               <input
-                type="number"
-                value={formData.target_id || ''}
-                onChange={(e) => setFormData({ ...formData, target_id: parseInt(e.target.value) })}
+                type="text"
+                value={searchQuery}
+                onChange={(e) => {
+                  setSearchQuery(e.target.value);
+                  setShowDropdown(true);
+                  setSelectedEntity(null);
+                }}
+                onFocus={() => setShowDropdown(true)}
                 className="w-full border rounded px-3 py-2 text-sm"
-                placeholder="Enter ID"
+                placeholder="Type to search..."
                 required
               />
+              {showDropdown && searchResults.length > 0 && (
+                <div className="absolute z-10 w-full mt-1 bg-white border rounded shadow-lg max-h-60 overflow-y-auto">
+                  {searchResults.map((result) => (
+                    <button
+                      key={`${result.type}-${result.id}`}
+                      type="button"
+                      onClick={() => handleSelectEntity(result)}
+                      className="w-full text-left px-3 py-2 hover:bg-gray-100 text-sm border-b last:border-b-0"
+                    >
+                      <div className="font-medium">{result.title}</div>
+                      <div className="text-xs text-gray-500">ID: {result.id}</div>
+                    </button>
+                  ))}
+                </div>
+              )}
+              {selectedEntity && (
+                <div className="mt-1 text-xs text-green-600">
+                  Selected: {selectedEntity.title} (ID: {selectedEntity.id})
+                </div>
+              )}
             </div>
           </div>
 
@@ -215,9 +296,18 @@ export default function RelationshipManager({ entityType, entityId, projectId }:
                   <span className="text-sm font-medium text-gray-700 capitalize">
                     {label.direction}
                   </span>
-                  <span className="text-sm text-gray-500">
-                    {label.targetType} #{label.targetId}
-                  </span>
+                  {label.targetType === 'story' ? (
+                    <Link
+                      to={`/story/${label.targetId}`}
+                      className="text-sm text-blue-600 hover:text-blue-800 hover:underline"
+                    >
+                      {label.targetType} #{label.targetId}
+                    </Link>
+                  ) : (
+                    <span className="text-sm text-gray-500">
+                      {label.targetType} #{label.targetId}
+                    </span>
+                  )}
                 </div>
                 <button
                   onClick={() => handleDelete(rel.id)}
