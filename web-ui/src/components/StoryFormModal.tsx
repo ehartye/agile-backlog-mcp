@@ -6,6 +6,7 @@ interface Story {
   epic_id: number | null;
   title: string;
   description: string;
+  acceptance_criteria?: string | null;
   status: 'todo' | 'in_progress' | 'review' | 'done' | 'blocked';
   priority: 'low' | 'medium' | 'high' | 'critical';
   points?: number;
@@ -29,6 +30,7 @@ export default function StoryFormModal({ isOpen, onClose, onSave, story, project
     epic_id: null,
     title: '',
     description: '',
+    acceptance_criteria: '',
     status: 'todo',
     priority: 'medium',
     points: undefined,
@@ -49,6 +51,7 @@ export default function StoryFormModal({ isOpen, onClose, onSave, story, project
         epic_id: null,
         title: '',
         description: '',
+        acceptance_criteria: '',
         status: 'todo',
         priority: 'medium',
         points: undefined,
@@ -138,6 +141,17 @@ export default function StoryFormModal({ isOpen, onClose, onSave, story, project
               className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
               rows={4}
               required
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Acceptance Criteria (Optional)</label>
+            <textarea
+              value={formData.acceptance_criteria || ''}
+              onChange={(e) => setFormData({ ...formData, acceptance_criteria: e.target.value })}
+              className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+              rows={3}
+              placeholder="Enter acceptance criteria..."
             />
           </div>
 

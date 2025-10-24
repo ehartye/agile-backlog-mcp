@@ -217,6 +217,12 @@ export default function BacklogListView({ projectId }: BacklogListViewProps) {
                       </span>
                     </div>
                     <p className="text-sm text-gray-600 mb-3 break-words">{story.description}</p>
+                    {story.acceptance_criteria && (
+                      <div className="mb-3 p-3 bg-gray-50 rounded border-l-4 border-green-500">
+                        <div className="text-xs font-semibold text-gray-700 mb-1">Acceptance Criteria:</div>
+                        <p className="text-sm text-gray-700 whitespace-pre-wrap">{story.acceptance_criteria}</p>
+                      </div>
+                    )}
                     <div className="flex flex-wrap items-center gap-2 md:gap-4 text-xs text-gray-500">
                       <span>#{story.id}</span>
                       <span className="break-all">{getEpicName(story.epic_id)}</span>

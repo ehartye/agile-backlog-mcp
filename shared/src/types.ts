@@ -33,6 +33,7 @@ export interface Story {
   epic_id: number | null;
   title: string;
   description: string;
+  acceptance_criteria: string | null;
   status: EntityStatus;
   priority: Priority;
   points: number | null;
@@ -127,6 +128,7 @@ export interface CreateStoryInput {
   epic_id?: number | null;
   title: string;
   description: string;
+  acceptance_criteria?: string | null;
   status?: EntityStatus;
   priority?: Priority;
   points?: number | null;
@@ -185,6 +187,7 @@ export interface UpdateStoryInput {
   epic_id?: number | null;
   title?: string;
   description?: string;
+  acceptance_criteria?: string | null;
   status?: EntityStatus;
   priority?: Priority;
   points?: number | null;

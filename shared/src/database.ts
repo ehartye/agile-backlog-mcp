@@ -270,6 +270,15 @@ export class AgileDatabase {
         console.error('[Migration] Note: Old dependencies table kept for backward compatibility');
       }
     }
+
+    // Migration 6: Add acceptance_criteria column to stories table
+    const storiesTableInfo3 = this.db.pragma('table_info(stories)') as Array<{ name: string }>;
+    const hasAcceptanceCriteria = storiesTableInfo3.length > 0 && storiesTableInfo3.some(col => col.name === 'acceptance_criteria');
+
+    if (storiesTableInfo3.length > 0 && !hasAcceptanceCriteria) {
+      console.error('[Migration] Adding acceptance_criteria to stories table...');
+      this.db.exec('ALTER TABLE stories ADD COLUMN acceptance_criteria TEXT');
+    }
   }
 
   private initializeDatabase(): void {
@@ -329,6 +338,7 @@ export class AgileDatabase {
         epic_id INTEGER,
         title TEXT NOT NULL,
         description TEXT NOT NULL,
+        acceptance_criteria TEXT,
         status TEXT NOT NULL DEFAULT 'todo',
         priority TEXT NOT NULL DEFAULT 'medium',
         points INTEGER,
@@ -670,14 +680,15 @@ export class AgileDatabase {
   // Story operations
   createStory(input: CreateStoryInput, agentIdentifier?: string, modifiedBy?: string): Story {
     const stmt = this.db.prepare(`
-      INSERT INTO stories (project_id, epic_id, title, description, status, priority, points, agent_identifier, last_modified_by)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO stories (project_id, epic_id, title, description, acceptance_criteria, status, priority, points, agent_identifier, last_modified_by)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
     const result = stmt.run(
       input.project_id,
       input.epic_id ?? null,
       input.title,
       input.description,
+      input.acceptance_criteria ?? null,
       input.status || 'todo',
       input.priority || 'medium',
       input.points ?? null,
@@ -743,6 +754,10 @@ export class AgileDatabase {
     if (input.description !== undefined) {
       updates.push('description = ?');
       values.push(input.description);
+    }
+    if (input.acceptance_criteria !== undefined) {
+      updates.push('acceptance_criteria = ?');
+      values.push(input.acceptance_criteria);
     }
     if (input.status !== undefined) {
       updates.push('status = ?');
