@@ -6,7 +6,7 @@ import type { Note, EntityType } from '../types';
 interface NotesPanelProps {
   entityType: EntityType;
   entityId: number;
-  entityTitle: string;
+  entityTitle?: string;
   projectId: number;
   agentIdentifier?: string;
 }

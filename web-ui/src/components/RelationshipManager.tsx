@@ -6,7 +6,7 @@ import type { Relationship, EntityType, RelationshipType } from '../types';
 interface RelationshipManagerProps {
   entityType: EntityType;
   entityId: number;
-  entityTitle: string;
+  entityTitle?: string;
   projectId: number;
 }
 

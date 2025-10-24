@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react';
-import { Plus, Edit, Trash } from 'lucide-react';
+import { Plus, Edit, Trash, ChevronDown, ChevronUp } from 'lucide-react';
 import { api } from '../utils/api';
 import type { Epic, Story, EntityStatus, Priority } from '../types';
 import EpicFormModal from './EpicFormModal';
 import StoryFormModal from './StoryFormModal';
+import RelationshipManager from './RelationshipManager';
+import NotesPanel from './NotesPanel';
 
 const statusColors: Record<EntityStatus, string> = {
   todo: 'bg-gray-200 text-gray-700',
@@ -37,6 +39,7 @@ export default function BacklogListView({ projectId }: BacklogListViewProps) {
   const [storyModalOpen, setStoryModalOpen] = useState(false);
   const [editingEpic, setEditingEpic] = useState<Epic | null>(null);
   const [editingStory, setEditingStory] = useState<Story | null>(null);
+  const [expandedStoryId, setExpandedStoryId] = useState<number | null>(null);
 
   useEffect(() => {
     loadData();
@@ -222,6 +225,13 @@ export default function BacklogListView({ projectId }: BacklogListViewProps) {
                   </div>
                   <div className="flex flex-col sm:flex-row gap-1 sm:gap-2 shrink-0">
                     <button
+                      onClick={() => setExpandedStoryId(expandedStoryId === story.id ? null : story.id)}
+                      className="p-2 text-gray-600 hover:bg-gray-50 rounded"
+                      title={expandedStoryId === story.id ? "Hide details" : "View details"}
+                    >
+                      {expandedStoryId === story.id ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                    </button>
+                    <button
                       onClick={() => handleEditStory(story)}
                       className="p-2 text-blue-600 hover:bg-blue-50 rounded"
                       title="Edit story"
@@ -237,6 +247,22 @@ export default function BacklogListView({ projectId }: BacklogListViewProps) {
                     </button>
                   </div>
                 </div>
+
+                {/* Expandable Details Section */}
+                {expandedStoryId === story.id && (
+                  <div className="mt-4 space-y-4 border-t pt-4">
+                    <RelationshipManager
+                      entityType="story"
+                      entityId={story.id}
+                      projectId={projectId}
+                    />
+                    <NotesPanel
+                      entityType="story"
+                      entityId={story.id}
+                      projectId={projectId}
+                    />
+                  </div>
+                )}
               </div>
             ))
           )}
