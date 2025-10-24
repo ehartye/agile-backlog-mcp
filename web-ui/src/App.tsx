@@ -23,8 +23,11 @@ function App() {
       if (!isNaN(projectId)) {
         setSelectedProjectId(projectId);
       }
+    } else {
+      // If there's no project param in URL, clear the selection
+      setSelectedProjectId(null);
     }
-  }, []);
+  }, [searchParams]);
 
   useEffect(() => {
     const checkApiHealth = async () => {
