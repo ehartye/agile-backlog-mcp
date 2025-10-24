@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { ArrowLeft, Edit, Trash } from 'lucide-react';
 import { api } from '../utils/api';
 import type { Story, Task, EntityStatus, Priority } from '../types';
@@ -25,10 +25,15 @@ const priorityColors: Record<Priority, string> = {
 export default function StoryDetailView() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [story, setStory] = useState<Story | null>(null);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
   const [editModalOpen, setEditModalOpen] = useState(false);
+
+  // Get project from URL params
+  const projectParam = searchParams.get('project');
+  const projectId = projectParam ? parseInt(projectParam) : null;
 
   useEffect(() => {
     loadStory();
@@ -54,10 +59,14 @@ export default function StoryDetailView() {
 
     try {
       await api.stories.delete(story.id);
-      navigate('/');
+      navigate(`/${projectId ? `?project=${projectId}` : ''}`);
     } catch (error) {
       console.error('Failed to delete story:', error);
     }
+  };
+
+  const handleBack = () => {
+    navigate(`/${projectId ? `?project=${projectId}` : ''}`);
   };
 
   if (loading) {
@@ -73,7 +82,7 @@ export default function StoryDetailView() {
       <div className="flex flex-col items-center justify-center h-full">
         <div className="text-gray-500 mb-4">Story not found</div>
         <button
-          onClick={() => navigate('/')}
+          onClick={handleBack}
           className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
         >
           Back to Backlog
@@ -88,7 +97,7 @@ export default function StoryDetailView() {
       <div className="bg-white shadow-sm border-b px-4 md:px-6 py-4">
         <div className="max-w-6xl mx-auto">
           <button
-            onClick={() => navigate('/')}
+            onClick={handleBack}
             className="flex items-center gap-2 text-gray-600 hover:text-gray-800 mb-4"
           >
             <ArrowLeft size={20} />

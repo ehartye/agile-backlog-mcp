@@ -44,6 +44,7 @@ export default function RelationshipManager({ entityType, entityId, projectId }:
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
   const [selectedEntity, setSelectedEntity] = useState<SearchResult | null>(null);
   const [showDropdown, setShowDropdown] = useState(false);
+  const [entityTitles, setEntityTitles] = useState<Record<string, string>>({});
 
   useEffect(() => {
     loadRelationships();
@@ -62,11 +63,58 @@ export default function RelationshipManager({ entityType, entityId, projectId }:
       setLoading(true);
       const data = await api.relationships.forEntity(entityType, entityId);
       setRelationships(data);
+
+      // Load titles for all related entities
+      await loadEntityTitles(data);
     } catch (error) {
       console.error('Failed to load relationships:', error);
     } finally {
       setLoading(false);
     }
+  };
+
+  const loadEntityTitles = async (relationships: Relationship[]) => {
+    const titles: Record<string, string> = {};
+
+    // Collect unique entities to fetch
+    const entitiesToFetch: Array<{ type: EntityType; id: number }> = [];
+
+    for (const rel of relationships) {
+      const isSource = rel.source_type === entityType && rel.source_id === entityId;
+      const targetType = isSource ? rel.target_type : rel.source_type;
+      const targetId = isSource ? rel.target_id : rel.source_id;
+
+      const key = `${targetType}-${targetId}`;
+      if (!titles[key]) {
+        entitiesToFetch.push({ type: targetType, id: targetId });
+      }
+    }
+
+    // Fetch titles for each entity
+    for (const entity of entitiesToFetch) {
+      try {
+        let title = `${entity.type} #${entity.id}`;
+
+        if (entity.type === 'epic') {
+          const epicData = await api.epics.get(entity.id);
+          title = epicData.epic.title;
+        } else if (entity.type === 'story') {
+          const storyData = await api.stories.get(entity.id);
+          title = storyData.story.title;
+        } else if (entity.type === 'task') {
+          // Tasks don't have a get endpoint, so we'll keep the ID format
+          // Or we could fetch the parent story and filter tasks
+          title = `Task #${entity.id}`;
+        }
+
+        titles[`${entity.type}-${entity.id}`] = title;
+      } catch (error) {
+        console.error(`Failed to load title for ${entity.type} ${entity.id}:`, error);
+        titles[`${entity.type}-${entity.id}`] = `${entity.type} #${entity.id}`;
+      }
+    }
+
+    setEntityTitles(titles);
   };
 
   const searchEntities = async () => {
@@ -287,6 +335,9 @@ export default function RelationshipManager({ entityType, entityId, projectId }:
         <div className="space-y-2">
           {relationships.map((rel) => {
             const label = getRelationshipLabel(rel);
+            const titleKey = `${label.targetType}-${label.targetId}`;
+            const title = entityTitles[titleKey] || `${label.targetType} #${label.targetId}`;
+
             return (
               <div
                 key={rel.id}
@@ -298,14 +349,14 @@ export default function RelationshipManager({ entityType, entityId, projectId }:
                   </span>
                   {label.targetType === 'story' ? (
                     <Link
-                      to={`/story/${label.targetId}`}
+                      to={`/story/${label.targetId}${projectId ? `?project=${projectId}` : ''}`}
                       className="text-sm text-blue-600 hover:text-blue-800 hover:underline"
                     >
-                      {label.targetType} #{label.targetId}
+                      {title}
                     </Link>
                   ) : (
                     <span className="text-sm text-gray-500">
-                      {label.targetType} #{label.targetId}
+                      {title}
                     </span>
                   )}
                 </div>

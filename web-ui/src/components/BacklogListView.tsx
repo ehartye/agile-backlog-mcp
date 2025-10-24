@@ -208,7 +208,7 @@ export default function BacklogListView({ projectId }: BacklogListViewProps) {
                   <div className="flex-1 min-w-0">
                     <div className="flex flex-wrap items-center gap-2 mb-2">
                       <Link
-                        to={`/story/${story.id}`}
+                        to={`/story/${story.id}${projectId ? `?project=${projectId}` : ''}`}
                         className="text-base md:text-lg font-semibold text-gray-800 hover:text-blue-600 break-words"
                       >
                         {story.title}

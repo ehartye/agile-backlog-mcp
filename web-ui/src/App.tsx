@@ -1,4 +1,4 @@
-import { Routes, Route, Link, useLocation } from 'react-router-dom';
+import { Routes, Route, Link, useLocation, useSearchParams } from 'react-router-dom';
 import { Network, TreePine, List, AlertTriangle, Menu, X } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import DependencyGraphView from './components/DependencyGraphView';
@@ -9,10 +9,22 @@ import ProjectSelector from './components/ProjectSelector';
 
 function App() {
   const location = useLocation();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [selectedProjectId, setSelectedProjectId] = useState<number | null>(null);
   const [apiConnected, setApiConnected] = useState<boolean>(true);
   const [checkingApi, setCheckingApi] = useState<boolean>(true);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState<boolean>(false);
+
+  // Initialize project from URL params on load
+  useEffect(() => {
+    const projectParam = searchParams.get('project');
+    if (projectParam) {
+      const projectId = parseInt(projectParam);
+      if (!isNaN(projectId)) {
+        setSelectedProjectId(projectId);
+      }
+    }
+  }, []);
 
   useEffect(() => {
     const checkApiHealth = async () => {
@@ -31,6 +43,16 @@ function App() {
     const interval = setInterval(checkApiHealth, 30000);
     return () => clearInterval(interval);
   }, []);
+
+  // Update URL when project changes
+  const handleProjectChange = (projectId: number | null) => {
+    setSelectedProjectId(projectId);
+    if (projectId) {
+      setSearchParams({ project: projectId.toString() });
+    } else {
+      setSearchParams({});
+    }
+  };
 
   const navItems = [
     { path: '/', icon: List, label: 'Backlog List' },
@@ -86,7 +108,7 @@ function App() {
 
         <ProjectSelector
           selectedProjectId={selectedProjectId}
-          onProjectChange={setSelectedProjectId}
+          onProjectChange={handleProjectChange}
         />
 
         <ul className="space-y-1 px-3 mt-4">
