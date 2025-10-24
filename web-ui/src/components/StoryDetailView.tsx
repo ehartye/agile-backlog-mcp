@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Edit, Trash } from 'lucide-react';
+import { useParams, useNavigate, Link } from 'react-router-dom';
+import { ArrowLeft, Edit, Trash, Calendar, Plus, X } from 'lucide-react';
 import { api } from '../utils/api';
-import type { Story, Task, EntityStatus, Priority } from '../types';
+import type { Story, Task, EntityStatus, Priority, Sprint } from '../types';
 import RelationshipManager from './RelationshipManager';
 import NotesPanel from './NotesPanel';
 import StoryFormModal from './StoryFormModal';
@@ -27,6 +27,9 @@ export default function StoryDetailView() {
   const navigate = useNavigate();
   const [story, setStory] = useState<Story | null>(null);
   const [tasks, setTasks] = useState<Task[]>([]);
+  const [currentSprint, setCurrentSprint] = useState<Sprint | null>(null);
+  const [availableSprints, setAvailableSprints] = useState<Sprint[]>([]);
+  const [showAddToSprint, setShowAddToSprint] = useState(false);
   const [loading, setLoading] = useState(true);
   const [editModalOpen, setEditModalOpen] = useState(false);
 
@@ -37,19 +40,67 @@ export default function StoryDetailView() {
   }, [storyId]);
 
   async function loadStory() {
-    if (!storyId) return;
+    if (!storyId || !projectId) return;
 
     try {
       setLoading(true);
-      const data = await api.stories.get(parseInt(storyId));
-      setStory(data.story);
-      setTasks(data.tasks || []);
+      const [storyData, sprintsData] = await Promise.all([
+        api.stories.get(parseInt(storyId)),
+        api.sprints.list({ project_id: projectId }),
+      ]);
+
+      setStory(storyData.story);
+      setTasks(storyData.tasks || []);
+
+      // Find which sprint this story is in by checking all sprints
+      let foundSprint: Sprint | null = null;
+      for (const sprint of sprintsData) {
+        const sprintDetails = await api.sprints.get(sprint.id);
+        if (sprintDetails.stories.some(s => s.id === parseInt(storyId))) {
+          foundSprint = sprint;
+          break;
+        }
+      }
+      setCurrentSprint(foundSprint);
+
+      // Available sprints are planning or active sprints (not the current one)
+      setAvailableSprints(
+        sprintsData.filter(s =>
+          (s.status === 'planning' || s.status === 'active') &&
+          s.id !== foundSprint?.id
+        )
+      );
     } catch (error) {
       console.error('Failed to load story:', error);
     } finally {
       setLoading(false);
     }
   }
+
+  const handleAddToSprint = async (sprintId: number) => {
+    if (!story) return;
+    try {
+      await api.sprints.addStory(sprintId, story.id);
+      setShowAddToSprint(false);
+      loadStory(); // Reload to update sprint info
+    } catch (error) {
+      console.error('Failed to add story to sprint:', error);
+      alert('Failed to add story to sprint: ' + (error as Error).message);
+    }
+  };
+
+  const handleRemoveFromSprint = async () => {
+    if (!story || !currentSprint) return;
+    if (!confirm(`Remove this story from ${currentSprint.name}?`)) return;
+
+    try {
+      await api.sprints.removeStory(currentSprint.id, story.id);
+      loadStory(); // Reload to update sprint info
+    } catch (error) {
+      console.error('Failed to remove story from sprint:', error);
+      alert('Failed to remove story from sprint: ' + (error as Error).message);
+    }
+  };
 
   const handleDelete = async () => {
     if (!story || !confirm('Are you sure you want to delete this story?')) return;
@@ -157,6 +208,93 @@ export default function StoryDetailView() {
               </div>
             </div>
           )}
+
+          {/* Sprint Info */}
+          <div className="bg-white rounded-lg shadow p-6">
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="text-lg font-semibold flex items-center gap-2">
+                <Calendar size={20} />
+                Sprint
+              </h2>
+              {!currentSprint && !showAddToSprint && availableSprints.length > 0 && (
+                <button
+                  onClick={() => setShowAddToSprint(true)}
+                  className="flex items-center gap-1 px-3 py-1 text-sm bg-blue-600 text-white rounded hover:bg-blue-700"
+                >
+                  <Plus size={16} />
+                  Add to Sprint
+                </button>
+              )}
+            </div>
+
+            {currentSprint ? (
+              <div className="flex items-center justify-between p-4 bg-blue-50 rounded border-l-4 border-blue-500">
+                <div>
+                  <Link
+                    to={`/project/${projectId}/sprint/${currentSprint.id}`}
+                    className="font-medium text-blue-600 hover:text-blue-800 hover:underline"
+                  >
+                    {currentSprint.name}
+                  </Link>
+                  <div className="text-sm text-gray-600 mt-1">
+                    <span className={`px-2 py-1 rounded text-xs font-medium ${
+                      currentSprint.status === 'planning' ? 'bg-gray-100 text-gray-700' :
+                      currentSprint.status === 'active' ? 'bg-green-100 text-green-700' :
+                      'bg-gray-100 text-gray-700'
+                    }`}>
+                      {currentSprint.status}
+                    </span>
+                    <span className="ml-2">
+                      {new Date(currentSprint.start_date).toLocaleDateString()} - {new Date(currentSprint.end_date).toLocaleDateString()}
+                    </span>
+                  </div>
+                </div>
+                <button
+                  onClick={handleRemoveFromSprint}
+                  className="p-2 text-red-600 hover:bg-red-50 rounded"
+                  title="Remove from sprint"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+            ) : showAddToSprint ? (
+              <div className="space-y-2">
+                {availableSprints.map(sprint => (
+                  <button
+                    key={sprint.id}
+                    onClick={() => handleAddToSprint(sprint.id)}
+                    className="w-full text-left p-3 border rounded hover:bg-gray-50"
+                  >
+                    <div className="font-medium">{sprint.name}</div>
+                    <div className="text-sm text-gray-600">
+                      <span className={`px-2 py-1 rounded text-xs font-medium ${
+                        sprint.status === 'planning' ? 'bg-gray-100 text-gray-700' :
+                        sprint.status === 'active' ? 'bg-green-100 text-green-700' :
+                        'bg-gray-100 text-gray-700'
+                      }`}>
+                        {sprint.status}
+                      </span>
+                      <span className="ml-2">
+                        {new Date(sprint.start_date).toLocaleDateString()} - {new Date(sprint.end_date).toLocaleDateString()}
+                      </span>
+                    </div>
+                  </button>
+                ))}
+                <button
+                  onClick={() => setShowAddToSprint(false)}
+                  className="w-full px-3 py-2 text-sm text-gray-600 hover:bg-gray-50 rounded border"
+                >
+                  Cancel
+                </button>
+              </div>
+            ) : (
+              <p className="text-gray-500 text-sm">
+                {availableSprints.length === 0
+                  ? 'No active or planning sprints available. Create a sprint to add this story.'
+                  : 'Not in any sprint. Click "Add to Sprint" to assign this story to a sprint.'}
+              </p>
+            )}
+          </div>
 
           {/* Tasks */}
           {tasks.length > 0 && (

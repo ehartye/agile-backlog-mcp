@@ -1,4 +1,8 @@
-import type { Epic, Story, Task, Dependency, DependencyGraph, HierarchyNode, Relationship, Note, EntityType } from '../types';
+import type {
+  Epic, Story, Task, Dependency, DependencyGraph, HierarchyNode,
+  Relationship, Note, EntityType, Sprint, SprintCapacity, SprintSnapshot,
+  SprintReport
+} from '../types';
 
 const API_BASE = '/api';
 
@@ -136,5 +140,62 @@ export const api = {
       body: JSON.stringify(data),
     }),
     delete: (id: number) => fetchJson<void>(`/notes/${id}`, { method: 'DELETE' }),
+  },
+
+  // Sprints
+  sprints: {
+    list: (filters?: Record<string, any>) => {
+      const params = new URLSearchParams(filters).toString();
+      return fetchJson<Sprint[]>(`/sprints${params ? `?${params}` : ''}`);
+    },
+    get: (id: number) =>
+      fetchJson<{ sprint: Sprint; stories: Story[]; capacity: SprintCapacity }>(`/sprints/${id}`),
+    create: (data: Partial<Sprint>) => fetchJson<Sprint>('/sprints', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+    update: (id: number, data: Partial<Sprint>) => fetchJson<Sprint>(`/sprints/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    }),
+    delete: (id: number) => fetchJson<void>(`/sprints/${id}`, { method: 'DELETE' }),
+    addStory: (sprintId: number, storyId: number) =>
+      fetchJson<{ success: boolean; capacity: SprintCapacity }>(`/sprints/${sprintId}/stories/${storyId}`, {
+        method: 'POST',
+      }),
+    removeStory: (sprintId: number, storyId: number) =>
+      fetchJson<{ success: boolean; capacity: SprintCapacity }>(`/sprints/${sprintId}/stories/${storyId}`, {
+        method: 'DELETE',
+      }),
+    start: (id: number) =>
+      fetchJson<{ sprint: Sprint; initial_snapshot: SprintSnapshot }>(`/sprints/${id}/start`, {
+        method: 'POST',
+      }),
+    complete: (id: number) =>
+      fetchJson<{ sprint: Sprint; final_snapshot: SprintSnapshot; report: SprintReport }>(`/sprints/${id}/complete`, {
+        method: 'POST',
+      }),
+    getBurndown: (id: number) =>
+      fetchJson<{
+        sprint: Sprint;
+        snapshots: SprintSnapshot[];
+        ideal_burndown: number[];
+        total_days: number;
+        capacity: SprintCapacity;
+      }>(`/sprints/${id}/burndown`),
+    getVelocityReport: (projectId: number, sprintCount: number = 3) => {
+      const params = new URLSearchParams({ sprint_count: sprintCount.toString() }).toString();
+      return fetchJson<{
+        average_velocity: number;
+        velocities: number[];
+        sprint_names: string[];
+        sprint_count: number;
+      }>(`/projects/${projectId}/velocity?${params}`);
+    },
+    createSnapshot: (id: number, date?: string) =>
+      fetchJson<SprintSnapshot>(`/sprints/${id}/snapshot`, {
+        method: 'POST',
+        body: JSON.stringify({ date }),
+      }),
   },
 };

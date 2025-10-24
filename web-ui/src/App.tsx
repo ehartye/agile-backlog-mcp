@@ -6,6 +6,8 @@ import HierarchyTreeView from './components/HierarchyTreeView';
 import BacklogListView from './components/BacklogListView';
 import StoryDetailView from './components/StoryDetailView';
 import ProjectSelector from './components/ProjectSelector';
+import SprintBoard from './components/SprintBoard';
+import BurndownChart from './components/BurndownChart';
 
 function App() {
   const location = useLocation();
@@ -180,6 +182,8 @@ function App() {
             <Route path="/" element={<BacklogListView projectId={null} />} />
             <Route path="/project/:projectId" element={<BacklogListView />} />
             <Route path="/project/:projectId/story/:storyId" element={<StoryDetailView />} />
+            <Route path="/project/:projectId/sprint/:sprintId" element={<SprintBoard />} />
+            <Route path="/project/:projectId/sprint/:sprintId/burndown" element={<BurndownChart />} />
             <Route path="/project/:projectId/dag" element={<DependencyGraphView />} />
             <Route path="/project/:projectId/tree" element={<HierarchyTreeView />} />
           </Routes>

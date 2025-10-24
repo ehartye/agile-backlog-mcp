@@ -3,6 +3,7 @@ export type Priority = 'low' | 'medium' | 'high' | 'critical';
 export type DependencyType = 'blocks' | 'blocked_by';
 export type EntityType = 'project' | 'epic' | 'story' | 'task';
 export type RelationshipType = 'blocks' | 'blocked_by' | 'related_to' | 'cloned_from' | 'depends_on';
+export type SprintStatus = 'planning' | 'active' | 'completed' | 'cancelled';
 
 export interface Epic {
   id: number;
@@ -103,4 +104,53 @@ export interface Note {
   project_id: number;
   created_at: string;
   updated_at: string;
+}
+
+export interface Sprint {
+  id: number;
+  project_id: number;
+  name: string;
+  goal: string | null;
+  start_date: string;
+  end_date: string;
+  capacity_points: number | null;
+  status: SprintStatus;
+  created_at: string;
+  updated_at: string;
+  agent_identifier: string | null;
+}
+
+export interface SprintStory {
+  id: number;
+  sprint_id: number;
+  story_id: number;
+  added_at: string;
+  added_by: string | null;
+}
+
+export interface SprintSnapshot {
+  id: number;
+  sprint_id: number;
+  snapshot_date: string;
+  remaining_points: number;
+  completed_points: number;
+  added_points: number;
+  removed_points: number;
+  created_at: string;
+}
+
+export interface SprintCapacity {
+  committed: number;
+  completed: number;
+  remaining: number;
+}
+
+export interface SprintReport {
+  total_stories: number;
+  completed_stories: number;
+  incomplete_stories: number;
+  completed_points: number;
+  remaining_points: number;
+  velocity: number;
+  completion_rate: number;
 }

@@ -24,6 +24,8 @@ Agile MCP provides a complete agile backlog management solution that bridges AI 
 
 ### 🤖 MCP Server (AI Agent Interface)
 - **Epic, Story, and Task Management**: Full CRUD operations
+- **Sprint & Iteration Planning**: Create sprints, manage capacity, track velocity
+- **Burndown Tracking**: Daily snapshots and burndown chart data
 - **Dependency Tracking**: Create dependencies with circular dependency prevention
 - **Conflict Detection**: Track modifications to detect concurrent edits
 - **Export Capabilities**: Export backlog data for analysis
@@ -32,7 +34,11 @@ Agile MCP provides a complete agile backlog management solution that bridges AI 
 ### 🌐 Web UI (Human Interface)
 - **Project Management**: Register and switch between projects
 - **Full CRUD Operations**: Create, edit, and delete epics, stories, and tasks
-- **Backlog List View**: Filterable list with epic grouping
+- **Sprint Management**: Create and manage sprints, add/remove stories
+- **Sprint Board**: Kanban-style board with drag-and-drop (5 status columns)
+- **Burndown Charts**: Visual burndown tracking with ideal vs actual lines
+- **Velocity Reports**: Historical velocity calculation for sprint planning
+- **Backlog List View**: Filterable list with sprint and epic filtering
 - **Dependency Graph**: Interactive React Flow visualization showing story dependencies
 - **Hierarchy Tree**: D3-powered tree view of Epic → Story → Task relationships
 - **Responsive Design**: Mobile-friendly interface with adaptive layouts
@@ -120,9 +126,11 @@ npm run dev
 ```
 
 Visit http://localhost:3004 to access:
-- **Backlog List** (`/`) - Filterable story list with CRUD operations
-- **Dependency Graph** (`/dag`) - Interactive dependency visualization
-- **Hierarchy Tree** (`/tree`) - Epic → Story → Task hierarchy
+- **Backlog List** (`/`) - Filterable story list with CRUD operations and sprint filtering
+- **Sprint Board** (`/project/:id/sprint/:sprintId`) - Kanban board for active sprints
+- **Burndown Chart** (`/project/:id/sprint/:sprintId/burndown`) - Sprint burndown visualization
+- **Dependency Graph** (`/project/:id/dag`) - Interactive dependency visualization
+- **Hierarchy Tree** (`/project/:id/tree`) - Epic → Story → Task hierarchy
 
 ## Core Concepts
 
@@ -137,6 +145,15 @@ Standard agile hierarchy:
 - **Epics**: High-level feature areas or initiatives
 - **Stories**: User stories with priority, points, and status
 - **Tasks**: Actionable sub-items of stories
+
+### Sprints & Iterations
+Time-boxed work periods with capacity planning:
+- **Sprint lifecycle**: planning → active → completed
+- **Story assignment**: Add/remove stories from sprints
+- **Capacity tracking**: Monitor committed vs completed points
+- **Burndown charts**: Track remaining work over time
+- **Velocity metrics**: Calculate historical team velocity
+- **Daily snapshots**: Record progress for burndown visualization
 
 ### Dependencies
 Story-to-story relationships:
@@ -224,9 +241,13 @@ Tool: add_dependency
 2. Select project from dropdown (or create new project)
 3. Click "New Epic" to create an epic
 4. Click "New Story" to create a story
-5. Use edit/delete icons for modifications
-6. Switch to "Dependency Graph" to visualize relationships
-7. Switch to "Hierarchy Tree" to see the full hierarchy
+5. Click "New Sprint" to create a sprint for iteration planning
+6. Add stories to sprints from story detail pages
+7. View active sprint board by clicking "Active Sprint" button
+8. Track progress with burndown charts
+9. Use edit/delete icons for modifications
+10. Switch to "Dependency Graph" to visualize relationships
+11. Switch to "Hierarchy Tree" to see the full hierarchy
 
 ## Security Features
 

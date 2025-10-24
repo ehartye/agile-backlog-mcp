@@ -413,6 +413,196 @@ app.get('/api/graph/hierarchy', (req, res) => {
   }
 });
 
+// Sprints
+app.get('/api/sprints', (req, res) => {
+  try {
+    const filter: any = {};
+    if (req.query.project_id) filter.project_id = parseInt(req.query.project_id as string);
+    if (req.query.status) filter.status = req.query.status;
+
+    const sprints = db.listSprints(filter);
+    res.json(sprints);
+  } catch (error) {
+    res.status(500).json({ error: (error as Error).message });
+  }
+});
+
+app.get('/api/sprints/:id', (req, res) => {
+  try {
+    const sprint = db.getSprint(parseInt(req.params.id));
+    if (!sprint) {
+      return res.status(404).json({ error: 'Sprint not found' });
+    }
+    const stories = db.getSprintStories(parseInt(req.params.id));
+    const capacity = db.calculateSprintCapacity(parseInt(req.params.id));
+    res.json({ sprint, stories, capacity });
+  } catch (error) {
+    res.status(500).json({ error: (error as Error).message });
+  }
+});
+
+app.post('/api/sprints', (req, res) => {
+  try {
+    const sprint = db.createSprint(req.body, 'web-ui');
+    res.status(201).json(sprint);
+  } catch (error) {
+    res.status(400).json({ error: (error as Error).message });
+  }
+});
+
+app.patch('/api/sprints/:id', (req, res) => {
+  try {
+    const sprint = db.updateSprint({ id: parseInt(req.params.id), ...req.body }, 'web-ui');
+    res.json(sprint);
+  } catch (error) {
+    res.status(400).json({ error: (error as Error).message });
+  }
+});
+
+app.delete('/api/sprints/:id', (req, res) => {
+  try {
+    db.deleteSprint(parseInt(req.params.id));
+    res.status(204).send();
+  } catch (error) {
+    res.status(500).json({ error: (error as Error).message });
+  }
+});
+
+app.post('/api/sprints/:sprintId/stories/:storyId', (req, res) => {
+  try {
+    db.addStoryToSprint(parseInt(req.params.sprintId), parseInt(req.params.storyId), 'web-ui');
+    const capacity = db.calculateSprintCapacity(parseInt(req.params.sprintId));
+    res.json({ success: true, capacity });
+  } catch (error) {
+    res.status(400).json({ error: (error as Error).message });
+  }
+});
+
+app.delete('/api/sprints/:sprintId/stories/:storyId', (req, res) => {
+  try {
+    db.removeStoryFromSprint(parseInt(req.params.sprintId), parseInt(req.params.storyId));
+    const capacity = db.calculateSprintCapacity(parseInt(req.params.sprintId));
+    res.json({ success: true, capacity });
+  } catch (error) {
+    res.status(500).json({ error: (error as Error).message });
+  }
+});
+
+app.post('/api/sprints/:id/start', (req, res) => {
+  try {
+    const sprint = db.getSprint(parseInt(req.params.id));
+    if (!sprint) {
+      return res.status(404).json({ error: 'Sprint not found' });
+    }
+    if (sprint.status !== 'planning') {
+      return res.status(400).json({ error: `Sprint is already in '${sprint.status}' status` });
+    }
+    const updated = db.updateSprint({ id: parseInt(req.params.id), status: 'active' }, 'web-ui');
+    const snapshot = db.createSprintSnapshot(parseInt(req.params.id));
+    res.json({ sprint: updated, initial_snapshot: snapshot });
+  } catch (error) {
+    res.status(400).json({ error: (error as Error).message });
+  }
+});
+
+app.post('/api/sprints/:id/complete', (req, res) => {
+  try {
+    const sprint = db.getSprint(parseInt(req.params.id));
+    if (!sprint) {
+      return res.status(404).json({ error: 'Sprint not found' });
+    }
+    if (sprint.status !== 'active') {
+      return res.status(400).json({ error: `Only active sprints can be completed. Current status: ${sprint.status}` });
+    }
+
+    const finalSnapshot = db.createSprintSnapshot(parseInt(req.params.id));
+    const updated = db.updateSprint({ id: parseInt(req.params.id), status: 'completed' }, 'web-ui');
+
+    const stories = db.getSprintStories(sprint.id);
+    const capacity = db.calculateSprintCapacity(parseInt(req.params.id));
+
+    const completedStories = stories.filter(s => s.status === 'done');
+    const incompleteStories = stories.filter(s => s.status !== 'done');
+
+    const report = {
+      total_stories: stories.length,
+      completed_stories: completedStories.length,
+      incomplete_stories: incompleteStories.length,
+      completed_points: capacity.completed,
+      remaining_points: capacity.remaining,
+      velocity: capacity.completed,
+      completion_rate: stories.length > 0 ? Math.round((completedStories.length / stories.length) * 100) : 0,
+    };
+
+    res.json({ sprint: updated, final_snapshot: finalSnapshot, report });
+  } catch (error) {
+    res.status(400).json({ error: (error as Error).message });
+  }
+});
+
+app.get('/api/sprints/:id/burndown', (req, res) => {
+  try {
+    const sprint = db.getSprint(parseInt(req.params.id));
+    if (!sprint) {
+      return res.status(404).json({ error: 'Sprint not found' });
+    }
+
+    const snapshots = db.getSprintSnapshots(parseInt(req.params.id));
+    const capacity = db.calculateSprintCapacity(parseInt(req.params.id));
+
+    const startDate = new Date(sprint.start_date);
+    const endDate = new Date(sprint.end_date);
+    const totalDays = Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24));
+    const totalPoints = capacity.committed;
+    const pointsPerDay = totalPoints / totalDays;
+
+    const idealBurndown: number[] = [];
+    for (let i = 0; i <= totalDays; i++) {
+      idealBurndown.push(Math.max(0, totalPoints - (pointsPerDay * i)));
+    }
+
+    res.json({ sprint, snapshots, ideal_burndown: idealBurndown, total_days: totalDays, capacity });
+  } catch (error) {
+    res.status(500).json({ error: (error as Error).message });
+  }
+});
+
+app.get('/api/projects/:projectId/velocity', (req, res) => {
+  try {
+    const sprintCount = req.query.sprint_count ? parseInt(req.query.sprint_count as string) : 3;
+    const velocities = db.calculateVelocity(parseInt(req.params.projectId), sprintCount);
+
+    const average = velocities.length > 0
+      ? velocities.reduce((a, b) => a + b, 0) / velocities.length
+      : 0;
+
+    const sprints = db.listSprints({ project_id: parseInt(req.params.projectId), status: 'completed' });
+    const recentSprints = sprints.slice(0, sprintCount);
+
+    res.json({
+      average_velocity: Math.round(average * 10) / 10,
+      velocities,
+      sprint_names: recentSprints.map(s => s.name),
+      sprint_count: velocities.length,
+    });
+  } catch (error) {
+    res.status(500).json({ error: (error as Error).message });
+  }
+});
+
+app.post('/api/sprints/:id/snapshot', (req, res) => {
+  try {
+    const sprint = db.getSprint(parseInt(req.params.id));
+    if (!sprint) {
+      return res.status(404).json({ error: 'Sprint not found' });
+    }
+    const snapshot = db.createSprintSnapshot(parseInt(req.params.id), req.body.date);
+    res.status(201).json(snapshot);
+  } catch (error) {
+    res.status(400).json({ error: (error as Error).message });
+  }
+});
+
 // Start server
 app.listen(PORT, () => {
   console.log(`API server running on http://localhost:${PORT}`);

@@ -13,6 +13,9 @@
   - [Story Tools](#story-tools)
   - [Task Tools](#task-tools)
   - [Dependency Tools](#dependency-tools)
+  - [Sprint Tools](#sprint-tools)
+  - [Relationship Tools](#relationship-tools)
+  - [Note Tools](#note-tools)
   - [Export Tools](#export-tools)
 - [Resources](#resources)
 - [Workflows](#workflows)
@@ -27,7 +30,9 @@ The Agile MCP server exposes agile backlog management tools via the Model Contex
 
 - Register and manage projects with unique identifiers
 - Create and maintain epics, stories, and tasks
-- Track dependencies between stories
+- Plan and track sprints with burndown charts and velocity metrics
+- Track dependencies and relationships between entities
+- Add notes and documentation to any entity
 - Export backlog data for analysis
 - Collaborate with other agents using conflict detection
 
@@ -799,6 +804,247 @@ List dependencies, optionally filtered by story or project.
   project_identifier: string;  // REQUIRED: Project identifier
   agent_identifier: string;    // REQUIRED: Your agent identifier
   story_id?: number;           // Optional: Filter by story
+}
+```
+
+---
+
+### Sprint Tools
+
+Sprint tools enable time-boxed iteration planning with capacity tracking, burndown charts, and velocity metrics.
+
+#### create_sprint
+
+Create a new sprint for iteration planning.
+
+**Parameters:**
+```typescript
+{
+  project_identifier: string;   // REQUIRED: Project identifier
+  agent_identifier: string;     // REQUIRED: Your agent identifier
+  name: string;                 // REQUIRED: Sprint name (e.g., "Sprint 23")
+  goal?: string;                // Optional: Sprint goal/objective
+  start_date: string;           // REQUIRED: Start date (YYYY-MM-DD)
+  end_date: string;             // REQUIRED: End date (YYYY-MM-DD)
+  capacity_points?: number;     // Optional: Team capacity in story points
+  status?: string;              // Optional: 'planning', 'active', 'completed', 'cancelled'
+}
+```
+
+**Example:**
+```json
+{
+  "project_identifier": "my-app",
+  "agent_identifier": "claude",
+  "name": "Sprint 23",
+  "goal": "Complete user authentication",
+  "start_date": "2024-01-15",
+  "end_date": "2024-01-29",
+  "capacity_points": 40,
+  "status": "planning"
+}
+```
+
+#### list_sprints
+
+List all sprints for a project with optional status filtering.
+
+**Parameters:**
+```typescript
+{
+  project_identifier: string;   // REQUIRED: Project identifier
+  agent_identifier: string;     // REQUIRED: Your agent identifier
+  status?: string;              // Optional: Filter by status
+}
+```
+
+#### get_sprint
+
+Get sprint details including stories, capacity, and metrics.
+
+**Parameters:**
+```typescript
+{
+  project_identifier: string;   // REQUIRED: Project identifier
+  agent_identifier: string;     // REQUIRED: Your agent identifier
+  sprint_id: number;            // REQUIRED: Sprint ID
+}
+```
+
+**Returns:**
+```typescript
+{
+  sprint: Sprint;               // Sprint details
+  stories: Story[];             // Stories in sprint
+  capacity: {
+    committed: number;          // Total story points committed
+    completed: number;          // Story points completed
+    remaining: number;          // Story points remaining
+  }
+}
+```
+
+#### update_sprint
+
+Update sprint properties.
+
+**Parameters:**
+```typescript
+{
+  project_identifier: string;   // REQUIRED: Project identifier
+  agent_identifier: string;     // REQUIRED: Your agent identifier
+  sprint_id: number;            // REQUIRED: Sprint ID
+  name?: string;                // Optional: New name
+  goal?: string;                // Optional: New goal
+  start_date?: string;          // Optional: New start date
+  end_date?: string;            // Optional: New end date
+  capacity_points?: number;     // Optional: New capacity
+  status?: string;              // Optional: New status
+}
+```
+
+#### delete_sprint
+
+Delete a sprint. Only 'planning' status sprints can be deleted.
+
+**Parameters:**
+```typescript
+{
+  project_identifier: string;   // REQUIRED: Project identifier
+  agent_identifier: string;     // REQUIRED: Your agent identifier
+  sprint_id: number;            // REQUIRED: Sprint ID
+}
+```
+
+#### add_story_to_sprint
+
+Add a story to a sprint.
+
+**Parameters:**
+```typescript
+{
+  project_identifier: string;   // REQUIRED: Project identifier
+  agent_identifier: string;     // REQUIRED: Your agent identifier
+  sprint_id: number;            // REQUIRED: Sprint ID
+  story_id: number;             // REQUIRED: Story ID
+}
+```
+
+#### remove_story_from_sprint
+
+Remove a story from a sprint.
+
+**Parameters:**
+```typescript
+{
+  project_identifier: string;   // REQUIRED: Project identifier
+  agent_identifier: string;     // REQUIRED: Your agent identifier
+  sprint_id: number;            // REQUIRED: Sprint ID
+  story_id: number;             // REQUIRED: Story ID
+}
+```
+
+#### start_sprint
+
+Start a sprint (changes status from 'planning' to 'active' and creates initial snapshot).
+
+**Parameters:**
+```typescript
+{
+  project_identifier: string;   // REQUIRED: Project identifier
+  agent_identifier: string;     // REQUIRED: Your agent identifier
+  sprint_id: number;            // REQUIRED: Sprint ID
+}
+```
+
+#### complete_sprint
+
+Complete a sprint (changes status to 'completed' and generates sprint report).
+
+**Parameters:**
+```typescript
+{
+  project_identifier: string;   // REQUIRED: Project identifier
+  agent_identifier: string;     // REQUIRED: Your agent identifier
+  sprint_id: number;            // REQUIRED: Sprint ID
+}
+```
+
+**Returns:**
+```typescript
+{
+  sprint: Sprint;
+  final_snapshot: SprintSnapshot;
+  report: {
+    total_stories: number;
+    completed_stories: number;
+    incomplete_stories: number;
+    completed_points: number;
+    remaining_points: number;
+    velocity: number;           // Completed points
+    completion_rate: number;    // Percentage
+  }
+}
+```
+
+#### get_sprint_burndown
+
+Get burndown chart data for a sprint.
+
+**Parameters:**
+```typescript
+{
+  project_identifier: string;   // REQUIRED: Project identifier
+  agent_identifier: string;     // REQUIRED: Your agent identifier
+  sprint_id: number;            // REQUIRED: Sprint ID
+}
+```
+
+**Returns:**
+```typescript
+{
+  sprint: Sprint;
+  snapshots: SprintSnapshot[];  // Daily snapshots
+  ideal_burndown: number[];     // Ideal burndown points
+  total_days: number;           // Sprint duration in days
+  capacity: SprintCapacity;
+}
+```
+
+#### get_velocity_report
+
+Calculate team velocity from completed sprints.
+
+**Parameters:**
+```typescript
+{
+  project_identifier: string;   // REQUIRED: Project identifier
+  agent_identifier: string;     // REQUIRED: Your agent identifier
+  sprint_count?: number;        // Optional: Number of sprints to analyze (default: 3)
+}
+```
+
+**Returns:**
+```typescript
+{
+  average_velocity: number;     // Average points per sprint
+  velocities: number[];         // Velocity for each sprint
+  sprint_names: string[];       // Names of analyzed sprints
+  sprint_count: number;         // Number of sprints analyzed
+}
+```
+
+#### create_daily_snapshot
+
+Manually create a daily snapshot for burndown tracking.
+
+**Parameters:**
+```typescript
+{
+  project_identifier: string;   // REQUIRED: Project identifier
+  agent_identifier: string;     // REQUIRED: Your agent identifier
+  sprint_id: number;            // REQUIRED: Sprint ID
+  date?: string;                // Optional: Snapshot date (YYYY-MM-DD), defaults to today
 }
 ```
 

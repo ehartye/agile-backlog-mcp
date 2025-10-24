@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
-import { Plus, Edit, Trash, ChevronDown, ChevronUp } from 'lucide-react';
+import { Link, useParams, useNavigate } from 'react-router-dom';
+import { Plus, Edit, Trash, ChevronDown, ChevronUp, Calendar, PlayCircle } from 'lucide-react';
 import { api } from '../utils/api';
-import type { Epic, Story, EntityStatus, Priority } from '../types';
+import type { Epic, Story, EntityStatus, Priority, Sprint } from '../types';
 import EpicFormModal from './EpicFormModal';
 import StoryFormModal from './StoryFormModal';
 import RelationshipManager from './RelationshipManager';
 import NotesPanel from './NotesPanel';
+import SprintFormModal from './SprintFormModal';
 
 const statusColors: Record<EntityStatus, string> = {
   todo: 'bg-gray-200 text-gray-700',
@@ -30,17 +31,21 @@ interface BacklogListViewProps {
 export default function BacklogListView({ projectId: projectIdProp }: BacklogListViewProps) {
   const { projectId: projectIdParam } = useParams<{ projectId: string }>();
   const projectId = projectIdParam ? parseInt(projectIdParam) : projectIdProp;
+  const navigate = useNavigate();
 
   const [epics, setEpics] = useState<Epic[]>([]);
   const [stories, setStories] = useState<Story[]>([]);
+  const [sprints, setSprints] = useState<Sprint[]>([]);
   const [loading, setLoading] = useState(true);
   const [filters, setFilters] = useState({
     epic_id: '',
     status: '',
     priority: '',
+    sprint_id: '',
   });
   const [epicModalOpen, setEpicModalOpen] = useState(false);
   const [storyModalOpen, setStoryModalOpen] = useState(false);
+  const [sprintModalOpen, setSprintModalOpen] = useState(false);
   const [editingEpic, setEditingEpic] = useState<Epic | null>(null);
   const [editingStory, setEditingStory] = useState<Story | null>(null);
   const [expandedStoryId, setExpandedStoryId] = useState<number | null>(null);
@@ -59,12 +64,14 @@ export default function BacklogListView({ projectId: projectIdProp }: BacklogLis
         filterParams.project_id = projectId;
       }
 
-      const [epicsData, storiesData] = await Promise.all([
+      const [epicsData, storiesData, sprintsData] = await Promise.all([
         api.epics.list(projectId ? { project_id: projectId } : {}),
         api.stories.list(filterParams),
+        projectId ? api.sprints.list({ project_id: projectId }) : Promise.resolve([]),
       ]);
       setEpics(epicsData);
       setStories(storiesData);
+      setSprints(sprintsData);
     } catch (error) {
       console.error('Failed to load data:', error);
     } finally {
@@ -97,6 +104,17 @@ export default function BacklogListView({ projectId: projectIdProp }: BacklogLis
     setStoryModalOpen(true);
   };
 
+  const handleNewSprint = () => {
+    setSprintModalOpen(true);
+  };
+
+  const handleViewActiveSprint = () => {
+    const activeSprint = sprints.find(s => s.status === 'active');
+    if (activeSprint && projectId) {
+      navigate(`/project/${projectId}/sprint/${activeSprint.id}`);
+    }
+  };
+
   const getEpicName = (epicId: number | null) => {
     if (!epicId) return 'No Epic';
     return epics.find(e => e.id === epicId)?.title || `Epic #${epicId}`;
@@ -126,7 +144,7 @@ export default function BacklogListView({ projectId: projectIdProp }: BacklogLis
           <div>
             <h2 className="text-xl md:text-2xl font-bold text-gray-800">Backlog</h2>
             <p className="text-sm text-gray-500 mt-1">
-              {stories.length} stories across {epics.length} epics
+              {stories.length} stories across {epics.length} epics • {sprints.length} sprints
             </p>
           </div>
           <div className="flex flex-wrap gap-2 w-full sm:w-auto">
@@ -144,12 +162,42 @@ export default function BacklogListView({ projectId: projectIdProp }: BacklogLis
               <Plus size={16} />
               <span className="hidden sm:inline">New</span> Story
             </button>
+            <button
+              onClick={handleNewSprint}
+              className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm"
+            >
+              <Calendar size={16} />
+              <span className="hidden sm:inline">New</span> Sprint
+            </button>
+            {sprints.some(s => s.status === 'active') && (
+              <button
+                onClick={handleViewActiveSprint}
+                className="flex items-center gap-2 px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 text-sm"
+              >
+                <PlayCircle size={16} />
+                Active Sprint
+              </button>
+            )}
           </div>
         </div>
       </div>
 
       {/* Filters */}
       <div className="bg-white border-b px-4 md:px-6 py-3 flex flex-wrap gap-2 md:gap-4">
+        <select
+          value={filters.sprint_id}
+          onChange={(e) => setFilters({ ...filters, sprint_id: e.target.value })}
+          className="px-3 py-2 border rounded-lg text-sm"
+        >
+          <option value="">All Stories</option>
+          <option value="backlog">Backlog (No Sprint)</option>
+          {sprints.map(sprint => (
+            <option key={sprint.id} value={sprint.id}>
+              {sprint.name} ({sprint.status})
+            </option>
+          ))}
+        </select>
+
         <select
           value={filters.epic_id}
           onChange={(e) => setFilters({ ...filters, epic_id: e.target.value })}
@@ -187,7 +235,7 @@ export default function BacklogListView({ projectId: projectIdProp }: BacklogLis
         </select>
 
         <button
-          onClick={() => setFilters({ epic_id: '', status: '', priority: '' })}
+          onClick={() => setFilters({ epic_id: '', status: '', priority: '', sprint_id: '' })}
           className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800"
         >
           Clear Filters
@@ -309,6 +357,15 @@ export default function BacklogListView({ projectId: projectIdProp }: BacklogLis
         story={editingStory}
         projectId={projectId}
       />
+
+      {projectId && (
+        <SprintFormModal
+          isOpen={sprintModalOpen}
+          onClose={() => setSprintModalOpen(false)}
+          onSuccess={loadData}
+          projectId={projectId}
+        />
+      )}
     </div>
   );
 }
