@@ -143,7 +143,32 @@ app.get('/api/stories', (req, res) => {
     if (req.query.priority) filter.priority = req.query.priority;
     if (req.query.has_dependencies) filter.has_dependencies = req.query.has_dependencies === 'true';
 
-    const stories = db.listStories(filter);
+    let stories = db.listStories(filter);
+
+    // Filter by sprint if sprint_id is provided
+    if (req.query.sprint_id) {
+      if (req.query.sprint_id === 'backlog') {
+        // Show stories not in any active or planning sprint
+        const allSprints = db.listSprints({
+          project_id: filter.project_id,
+        }).filter(s => s.status === 'active' || s.status === 'planning');
+
+        const storyIdsInSprints = new Set<number>();
+        for (const sprint of allSprints) {
+          const sprintStories = db.getSprintStories(sprint.id);
+          sprintStories.forEach(s => storyIdsInSprints.add(s.id));
+        }
+
+        stories = stories.filter(s => !storyIdsInSprints.has(s.id));
+      } else {
+        // Show stories in specific sprint
+        const sprintId = parseInt(req.query.sprint_id as string);
+        const sprintStories = db.getSprintStories(sprintId);
+        const storyIdsInSprint = new Set(sprintStories.map(s => s.id));
+        stories = stories.filter(s => storyIdsInSprint.has(s.id));
+      }
+    }
+
     res.json(stories);
   } catch (error) {
     res.status(500).json({ error: (error as Error).message });
