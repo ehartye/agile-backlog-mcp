@@ -98,7 +98,7 @@ ${story.description}
             storyMd += `## Tasks\n`;
             for (const task of tasks) {
               const checkbox = task.status === 'done' ? '[x]' : '[ ]';
-              storyMd += `- ${checkbox} **${task.title}** (${task.status})${task.assignee ? ` - @${task.assignee}` : ''}\n`;
+              storyMd += `- ${checkbox} **${task.title}** (${task.status})${task.assigned_to ? ` - @${task.assigned_to}` : ''}\n`;
               storyMd += `  ${task.description}\n`;
             }
             storyMd += '\n';
@@ -148,7 +148,7 @@ ${story.description}
           storyMd += `## Tasks\n`;
           for (const task of tasks) {
             const checkbox = task.status === 'done' ? '[x]' : '[ ]';
-            storyMd += `- ${checkbox} **${task.title}** (${task.status})${task.assignee ? ` - @${task.assignee}` : ''}\n`;
+            storyMd += `- ${checkbox} **${task.title}** (${task.status})${task.assigned_to ? ` - @${task.assigned_to}` : ''}\n`;
             storyMd += `  ${task.description}\n`;
           }
           storyMd += '\n';

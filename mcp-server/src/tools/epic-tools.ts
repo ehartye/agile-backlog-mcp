@@ -10,8 +10,8 @@ export async function handleEpicTools(request: CallToolRequest, db: AgileDatabas
         const ctx = getProjectContext(
           db,
           args.project_identifier as string,
-          args.agent_identifier as string,
-          args.modified_by as string | undefined
+          args.user_id as string,
+          
         );
 
         const epic = db.createEpic({
@@ -19,7 +19,7 @@ export async function handleEpicTools(request: CallToolRequest, db: AgileDatabas
           title: args.title as string,
           description: args.description as string,
           status: args.status as any,
-        }, ctx.agent_identifier, ctx.modified_by);
+        });
 
         return {
           content: [
@@ -39,22 +39,22 @@ export async function handleEpicTools(request: CallToolRequest, db: AgileDatabas
         const ctx = getProjectContext(
           db,
           args.project_identifier as string,
-          args.agent_identifier as string,
-          args.modified_by as string | undefined
+          args.user_id as string,
+          
         );
 
         // Validate access
         validateProjectAccess(db, ctx, 'epic', args.id as number);
 
         // Detect conflicts
-        const hasConflict = detectConflict(db, 'epic', args.id as number, ctx.modified_by, ctx.agent_identifier);
+        const hasConflict = detectConflict(db, 'epic', args.id as number, ctx.user_id);
 
         const epic = db.updateEpic({
           id: args.id as number,
           title: args.title as string | undefined,
           description: args.description as string | undefined,
           status: args.status as any,
-        }, ctx.agent_identifier, ctx.modified_by);
+        });
 
         return {
           content: [
@@ -75,7 +75,7 @@ export async function handleEpicTools(request: CallToolRequest, db: AgileDatabas
         const ctx = getProjectContext(
           db,
           args.project_identifier as string,
-          args.agent_identifier as string
+          args.user_id as string
         );
 
         const epics = db.listEpics({ project_id: ctx.project_id });
@@ -99,7 +99,7 @@ export async function handleEpicTools(request: CallToolRequest, db: AgileDatabas
         const ctx = getProjectContext(
           db,
           args.project_identifier as string,
-          args.agent_identifier as string
+          args.user_id as string
         );
 
         const epic = db.getEpic(args.id as number);
@@ -130,7 +130,7 @@ export async function handleEpicTools(request: CallToolRequest, db: AgileDatabas
         const ctx = getProjectContext(
           db,
           args.project_identifier as string,
-          args.agent_identifier as string
+          args.user_id as string
         );
 
         // Validate access

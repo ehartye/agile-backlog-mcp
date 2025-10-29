@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { X } from 'lucide-react';
+import { UserSelector } from './UserSelector';
 
 interface Story {
   id?: number;
@@ -10,6 +11,7 @@ interface Story {
   status: 'todo' | 'in_progress' | 'review' | 'done' | 'blocked';
   priority: 'low' | 'medium' | 'high' | 'critical';
   points?: number;
+  assigned_to?: string;
 }
 
 interface Epic {
@@ -34,6 +36,7 @@ export default function StoryFormModal({ isOpen, onClose, onSave, story, project
     status: 'todo',
     priority: 'medium',
     points: undefined,
+    assigned_to: undefined,
   });
   const [epics, setEpics] = useState<Epic[]>([]);
 
@@ -55,6 +58,7 @@ export default function StoryFormModal({ isOpen, onClose, onSave, story, project
         status: 'todo',
         priority: 'medium',
         points: undefined,
+        assigned_to: undefined,
       });
     }
   }, [story]);
@@ -195,6 +199,15 @@ export default function StoryFormModal({ isOpen, onClose, onSave, story, project
                 min="0"
               />
             </div>
+          </div>
+
+          <div>
+            <UserSelector
+              value={formData.assigned_to || null}
+              onChange={(userId) => setFormData({ ...formData, assigned_to: userId || undefined })}
+              label="Assigned To"
+              placeholder="Optional"
+            />
           </div>
 
           <div className="flex gap-3 pt-4">

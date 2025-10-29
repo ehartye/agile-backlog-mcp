@@ -12,6 +12,7 @@ import { AgileDatabase } from '@agile-mcp/shared';
 import { handleProjectTools } from './tools/project-tools.js';
 import { handleEpicTools } from './tools/epic-tools.js';
 import { handleStoryTools } from './tools/story-tools.js';
+import { handleBugTools } from './tools/bug-tools.js';
 import { handleTaskTools } from './tools/task-tools.js';
 import { handleDependencyTools } from './tools/dependency-tools.js';
 import { handleRelationshipTools } from './tools/relationship-tools.js';
@@ -47,6 +48,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     handleProjectTools,
     handleEpicTools,
     handleStoryTools,
+    handleBugTools,
     handleTaskTools,
     handleDependencyTools,
     handleRelationshipTools,
@@ -128,13 +130,12 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           type: 'object',
           properties: {
             project_identifier: { type: 'string', description: 'Project identifier' },
-            agent_identifier: { type: 'string', description: 'Agent identifier for attribution' },
-            modified_by: { type: 'string', description: 'Display name (optional, defaults to agent_identifier)' },
+            user_id: { type: 'string', description: 'User ID performing the action' },
             title: { type: 'string', description: 'Epic title' },
             description: { type: 'string', description: 'Epic description' },
             status: { type: 'string', enum: ['todo', 'in_progress', 'review', 'done', 'blocked'], description: 'Initial status (default: todo)' },
           },
-          required: ['project_identifier', 'agent_identifier', 'title', 'description'],
+          required: ['project_identifier', 'user_id', 'title', 'description'],
         },
       },
       {
@@ -144,14 +145,13 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           type: 'object',
           properties: {
             project_identifier: { type: 'string', description: 'Project identifier' },
-            agent_identifier: { type: 'string', description: 'Agent identifier for attribution' },
-            modified_by: { type: 'string', description: 'Identifier for the agent/user making this change (for conflict detection)' },
+            user_id: { type: 'string', description: 'User ID performing the action' },
             id: { type: 'number', description: 'Epic ID' },
             title: { type: 'string', description: 'New title' },
             description: { type: 'string', description: 'New description' },
             status: { type: 'string', enum: ['todo', 'in_progress', 'review', 'done', 'blocked'] },
           },
-          required: ['project_identifier', 'agent_identifier', 'id'],
+          required: ['project_identifier', 'user_id', 'id'],
         },
       },
       {
@@ -161,10 +161,10 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           type: 'object',
           properties: {
             project_identifier: { type: 'string', description: 'Project identifier' },
-            agent_identifier: { type: 'string', description: 'Agent identifier for attribution' },
+            user_id: { type: 'string', description: 'User ID performing the action' },
             status: { type: 'string', enum: ['todo', 'in_progress', 'review', 'done', 'blocked'], description: 'Filter by status' },
           },
-          required: ['project_identifier', 'agent_identifier'],
+          required: ['project_identifier', 'user_id'],
         },
       },
       {
@@ -174,10 +174,10 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           type: 'object',
           properties: {
             project_identifier: { type: 'string', description: 'Project identifier' },
-            agent_identifier: { type: 'string', description: 'Agent identifier for attribution' },
+            user_id: { type: 'string', description: 'User ID performing the action' },
             id: { type: 'number', description: 'Epic ID' },
           },
-          required: ['project_identifier', 'agent_identifier', 'id'],
+          required: ['project_identifier', 'user_id', 'id'],
         },
       },
       {
@@ -187,10 +187,10 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           type: 'object',
           properties: {
             project_identifier: { type: 'string', description: 'Project identifier' },
-            agent_identifier: { type: 'string', description: 'Agent identifier for attribution' },
+            user_id: { type: 'string', description: 'User ID performing the action' },
             id: { type: 'number', description: 'Epic ID' },
           },
-          required: ['project_identifier', 'agent_identifier', 'id'],
+          required: ['project_identifier', 'user_id', 'id'],
         },
       },
       // Story tools
@@ -201,8 +201,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           type: 'object',
           properties: {
             project_identifier: { type: 'string', description: 'Project identifier' },
-            agent_identifier: { type: 'string', description: 'Agent identifier for attribution' },
-            modified_by: { type: 'string', description: 'Identifier for the agent/user making this change (for conflict detection)' },
+            user_id: { type: 'string', description: 'User ID performing the action' },
             epic_id: { type: 'number', description: 'Epic ID (optional)' },
             title: { type: 'string', description: 'Story title' },
             description: { type: 'string', description: 'Story description' },
@@ -211,7 +210,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
             priority: { type: 'string', enum: ['low', 'medium', 'high', 'critical'] },
             points: { type: 'number', description: 'Story points' },
           },
-          required: ['project_identifier', 'agent_identifier', 'title', 'description'],
+          required: ['project_identifier', 'user_id', 'title', 'description'],
         },
       },
       {
@@ -221,8 +220,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           type: 'object',
           properties: {
             project_identifier: { type: 'string', description: 'Project identifier' },
-            agent_identifier: { type: 'string', description: 'Agent identifier for attribution' },
-            modified_by: { type: 'string', description: 'Identifier for the agent/user making this change (for conflict detection)' },
+            user_id: { type: 'string', description: 'User ID performing the action' },
             id: { type: 'number', description: 'Story ID' },
             epic_id: { type: 'number', description: 'Epic ID' },
             title: { type: 'string', description: 'New title' },
@@ -232,7 +230,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
             priority: { type: 'string', enum: ['low', 'medium', 'high', 'critical'] },
             points: { type: 'number', description: 'Story points' },
           },
-          required: ['project_identifier', 'agent_identifier', 'id'],
+          required: ['project_identifier', 'user_id', 'id'],
         },
       },
       {
@@ -242,13 +240,13 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           type: 'object',
           properties: {
             project_identifier: { type: 'string', description: 'Project identifier' },
-            agent_identifier: { type: 'string', description: 'Agent identifier for attribution' },
+            user_id: { type: 'string', description: 'User ID performing the action' },
             epic_id: { type: 'number', description: 'Filter by epic ID' },
             status: { type: 'string', enum: ['todo', 'in_progress', 'review', 'done', 'blocked'] },
             priority: { type: 'string', enum: ['low', 'medium', 'high', 'critical'] },
             has_dependencies: { type: 'boolean', description: 'Filter by dependency existence' },
           },
-          required: ['project_identifier', 'agent_identifier'],
+          required: ['project_identifier', 'user_id'],
         },
       },
       {
@@ -258,10 +256,10 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           type: 'object',
           properties: {
             project_identifier: { type: 'string', description: 'Project identifier' },
-            agent_identifier: { type: 'string', description: 'Agent identifier for attribution' },
+            user_id: { type: 'string', description: 'User ID performing the action' },
             id: { type: 'number', description: 'Story ID' },
           },
-          required: ['project_identifier', 'agent_identifier', 'id'],
+          required: ['project_identifier', 'user_id', 'id'],
         },
       },
       {
@@ -271,10 +269,94 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           type: 'object',
           properties: {
             project_identifier: { type: 'string', description: 'Project identifier' },
-            agent_identifier: { type: 'string', description: 'Agent identifier for attribution' },
+            user_id: { type: 'string', description: 'User ID performing the action' },
             id: { type: 'number', description: 'Story ID' },
           },
-          required: ['project_identifier', 'agent_identifier', 'id'],
+          required: ['project_identifier', 'user_id', 'id'],
+        },
+      },
+      // Bug tools
+      {
+        name: 'create_bug',
+        description: 'Create a new bug in the current project',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            project_identifier: { type: 'string', description: 'Project identifier' },
+            user_id: { type: 'string', description: 'User ID performing the action' },
+            story_id: { type: 'number', description: 'Story ID (optional - bugs can be standalone or linked to stories)' },
+            title: { type: 'string', description: 'Bug title' },
+            description: { type: 'string', description: 'Bug description' },
+            severity: { type: 'string', enum: ['critical', 'major', 'minor', 'trivial'], description: 'Bug severity' },
+            error_message: { type: 'string', description: 'Error message (optional)' },
+            status: { type: 'string', enum: ['todo', 'in_progress', 'review', 'done', 'blocked'] },
+            priority: { type: 'string', enum: ['low', 'medium', 'high', 'critical'] },
+            points: { type: 'number', description: 'Story points' },
+          },
+          required: ['project_identifier', 'user_id', 'title', 'description', 'severity'],
+        },
+      },
+      {
+        name: 'update_bug',
+        description: 'Update an existing bug in the current project',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            project_identifier: { type: 'string', description: 'Project identifier' },
+            user_id: { type: 'string', description: 'User ID performing the action' },
+            id: { type: 'number', description: 'Bug ID' },
+            story_id: { type: 'number', description: 'Story ID (optional)' },
+            title: { type: 'string', description: 'Bug title' },
+            description: { type: 'string', description: 'Bug description' },
+            severity: { type: 'string', enum: ['critical', 'major', 'minor', 'trivial'] },
+            error_message: { type: 'string', description: 'Error message' },
+            status: { type: 'string', enum: ['todo', 'in_progress', 'review', 'done', 'blocked'] },
+            priority: { type: 'string', enum: ['low', 'medium', 'high', 'critical'] },
+            points: { type: 'number', description: 'Story points' },
+          },
+          required: ['project_identifier', 'user_id', 'id'],
+        },
+      },
+      {
+        name: 'list_bugs',
+        description: 'List bugs in the current project with optional filters',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            project_identifier: { type: 'string', description: 'Project identifier' },
+            user_id: { type: 'string', description: 'User ID performing the action' },
+            story_id: { type: 'number', description: 'Filter by story ID (optional)' },
+            status: { type: 'string', enum: ['todo', 'in_progress', 'review', 'done', 'blocked'] },
+            priority: { type: 'string', enum: ['low', 'medium', 'high', 'critical'] },
+            severity: { type: 'string', enum: ['critical', 'major', 'minor', 'trivial'] },
+          },
+          required: ['project_identifier', 'user_id'],
+        },
+      },
+      {
+        name: 'get_bug',
+        description: 'Get a specific bug',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            project_identifier: { type: 'string', description: 'Project identifier' },
+            user_id: { type: 'string', description: 'User ID performing the action' },
+            id: { type: 'number', description: 'Bug ID' },
+          },
+          required: ['project_identifier', 'user_id', 'id'],
+        },
+      },
+      {
+        name: 'delete_bug',
+        description: 'Delete a bug from the current project',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            project_identifier: { type: 'string', description: 'Project identifier' },
+            user_id: { type: 'string', description: 'User ID performing the action' },
+            id: { type: 'number', description: 'Bug ID' },
+          },
+          required: ['project_identifier', 'user_id', 'id'],
         },
       },
       // Task tools
@@ -285,15 +367,14 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           type: 'object',
           properties: {
             project_identifier: { type: 'string', description: 'Project identifier' },
-            agent_identifier: { type: 'string', description: 'Agent identifier for attribution' },
-            modified_by: { type: 'string', description: 'Identifier for the agent/user making this change (for conflict detection)' },
+            user_id: { type: 'string', description: 'User ID performing the action' },
             story_id: { type: 'number', description: 'Story ID' },
             title: { type: 'string', description: 'Task title' },
             description: { type: 'string', description: 'Task description' },
             status: { type: 'string', enum: ['todo', 'in_progress', 'review', 'done', 'blocked'] },
             assignee: { type: 'string', description: 'Task assignee' },
           },
-          required: ['project_identifier', 'agent_identifier', 'story_id', 'title', 'description'],
+          required: ['project_identifier', 'user_id', 'story_id', 'title', 'description'],
         },
       },
       {
@@ -303,8 +384,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           type: 'object',
           properties: {
             project_identifier: { type: 'string', description: 'Project identifier' },
-            agent_identifier: { type: 'string', description: 'Agent identifier for attribution' },
-            modified_by: { type: 'string', description: 'Identifier for the agent/user making this change (for conflict detection)' },
+            user_id: { type: 'string', description: 'User ID performing the action' },
             id: { type: 'number', description: 'Task ID' },
             story_id: { type: 'number', description: 'Story ID' },
             title: { type: 'string', description: 'New title' },
@@ -312,7 +392,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
             status: { type: 'string', enum: ['todo', 'in_progress', 'review', 'done', 'blocked'] },
             assignee: { type: 'string', description: 'Task assignee' },
           },
-          required: ['project_identifier', 'agent_identifier', 'id'],
+          required: ['project_identifier', 'user_id', 'id'],
         },
       },
       {
@@ -322,12 +402,12 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           type: 'object',
           properties: {
             project_identifier: { type: 'string', description: 'Project identifier' },
-            agent_identifier: { type: 'string', description: 'Agent identifier for attribution' },
+            user_id: { type: 'string', description: 'User ID performing the action' },
             story_id: { type: 'number', description: 'Filter by story ID' },
             status: { type: 'string', enum: ['todo', 'in_progress', 'review', 'done', 'blocked'] },
             assignee: { type: 'string', description: 'Filter by assignee' },
           },
-          required: ['project_identifier', 'agent_identifier'],
+          required: ['project_identifier', 'user_id'],
         },
       },
       {
@@ -337,10 +417,10 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           type: 'object',
           properties: {
             project_identifier: { type: 'string', description: 'Project identifier' },
-            agent_identifier: { type: 'string', description: 'Agent identifier for attribution' },
+            user_id: { type: 'string', description: 'User ID performing the action' },
             id: { type: 'number', description: 'Task ID' },
           },
-          required: ['project_identifier', 'agent_identifier', 'id'],
+          required: ['project_identifier', 'user_id', 'id'],
         },
       },
       {
@@ -350,10 +430,10 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           type: 'object',
           properties: {
             project_identifier: { type: 'string', description: 'Project identifier' },
-            agent_identifier: { type: 'string', description: 'Agent identifier for attribution' },
+            user_id: { type: 'string', description: 'User ID performing the action' },
             id: { type: 'number', description: 'Task ID' },
           },
-          required: ['project_identifier', 'agent_identifier', 'id'],
+          required: ['project_identifier', 'user_id', 'id'],
         },
       },
       // Dependency tools
@@ -364,12 +444,12 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           type: 'object',
           properties: {
             project_identifier: { type: 'string', description: 'Project identifier' },
-            agent_identifier: { type: 'string', description: 'Agent identifier for attribution' },
+            user_id: { type: 'string', description: 'User ID performing the action' },
             story_id: { type: 'number', description: 'Story ID that depends on another' },
             depends_on_story_id: { type: 'number', description: 'Story ID that is depended upon' },
             dependency_type: { type: 'string', enum: ['blocks', 'blocked_by'], description: 'Type of dependency' },
           },
-          required: ['project_identifier', 'agent_identifier', 'story_id', 'depends_on_story_id', 'dependency_type'],
+          required: ['project_identifier', 'user_id', 'story_id', 'depends_on_story_id', 'dependency_type'],
         },
       },
       {
@@ -379,10 +459,10 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           type: 'object',
           properties: {
             project_identifier: { type: 'string', description: 'Project identifier' },
-            agent_identifier: { type: 'string', description: 'Agent identifier for attribution' },
+            user_id: { type: 'string', description: 'User ID performing the action' },
             id: { type: 'number', description: 'Dependency ID' },
           },
-          required: ['project_identifier', 'agent_identifier', 'id'],
+          required: ['project_identifier', 'user_id', 'id'],
         },
       },
       {
@@ -392,10 +472,10 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           type: 'object',
           properties: {
             project_identifier: { type: 'string', description: 'Project identifier' },
-            agent_identifier: { type: 'string', description: 'Agent identifier for attribution' },
+            user_id: { type: 'string', description: 'User ID performing the action' },
             story_id: { type: 'number', description: 'Filter by story ID (optional)' },
           },
-          required: ['project_identifier', 'agent_identifier'],
+          required: ['project_identifier', 'user_id'],
         },
       },
       // Relationship tools (polymorphic many-to-many)
@@ -406,14 +486,14 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           type: 'object',
           properties: {
             project_identifier: { type: 'string', description: 'Project identifier' },
-            agent_identifier: { type: 'string', description: 'Agent identifier for attribution' },
+            user_id: { type: 'string', description: 'User ID performing the action' },
             source_type: { type: 'string', enum: ['project', 'epic', 'story', 'task'], description: 'Type of source entity' },
             source_id: { type: 'number', description: 'ID of source entity' },
             target_type: { type: 'string', enum: ['project', 'epic', 'story', 'task'], description: 'Type of target entity' },
             target_id: { type: 'number', description: 'ID of target entity' },
             relationship_type: { type: 'string', enum: ['blocks', 'blocked_by', 'related_to', 'cloned_from', 'depends_on'], description: 'Type of relationship' },
           },
-          required: ['project_identifier', 'agent_identifier', 'source_type', 'source_id', 'target_type', 'target_id', 'relationship_type'],
+          required: ['project_identifier', 'user_id', 'source_type', 'source_id', 'target_type', 'target_id', 'relationship_type'],
         },
       },
       {
@@ -423,10 +503,10 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           type: 'object',
           properties: {
             project_identifier: { type: 'string', description: 'Project identifier' },
-            agent_identifier: { type: 'string', description: 'Agent identifier for attribution' },
+            user_id: { type: 'string', description: 'User ID performing the action' },
             id: { type: 'number', description: 'Relationship ID' },
           },
-          required: ['project_identifier', 'agent_identifier', 'id'],
+          required: ['project_identifier', 'user_id', 'id'],
         },
       },
       {
@@ -436,14 +516,14 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           type: 'object',
           properties: {
             project_identifier: { type: 'string', description: 'Project identifier' },
-            agent_identifier: { type: 'string', description: 'Agent identifier for attribution' },
+            user_id: { type: 'string', description: 'User ID performing the action' },
             source_type: { type: 'string', enum: ['project', 'epic', 'story', 'task'], description: 'Filter by source entity type (optional)' },
             source_id: { type: 'number', description: 'Filter by source entity ID (optional)' },
             target_type: { type: 'string', enum: ['project', 'epic', 'story', 'task'], description: 'Filter by target entity type (optional)' },
             target_id: { type: 'number', description: 'Filter by target entity ID (optional)' },
             relationship_type: { type: 'string', enum: ['blocks', 'blocked_by', 'related_to', 'cloned_from', 'depends_on'], description: 'Filter by relationship type (optional)' },
           },
-          required: ['project_identifier', 'agent_identifier'],
+          required: ['project_identifier', 'user_id'],
         },
       },
       {
@@ -453,11 +533,11 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           type: 'object',
           properties: {
             project_identifier: { type: 'string', description: 'Project identifier' },
-            agent_identifier: { type: 'string', description: 'Agent identifier for attribution' },
+            user_id: { type: 'string', description: 'User ID performing the action' },
             entity_type: { type: 'string', enum: ['project', 'epic', 'story', 'task'], description: 'Type of entity' },
             entity_id: { type: 'number', description: 'ID of entity' },
           },
-          required: ['project_identifier', 'agent_identifier', 'entity_type', 'entity_id'],
+          required: ['project_identifier', 'user_id', 'entity_type', 'entity_id'],
         },
       },
       // Note tools (polymorphic notes)
@@ -468,13 +548,13 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           type: 'object',
           properties: {
             project_identifier: { type: 'string', description: 'Project identifier' },
-            agent_identifier: { type: 'string', description: 'Agent identifier for attribution' },
+            user_id: { type: 'string', description: 'User ID performing the action' },
             parent_type: { type: 'string', enum: ['project', 'epic', 'story', 'task'], description: 'Type of parent entity' },
             parent_id: { type: 'number', description: 'ID of parent entity' },
             content: { type: 'string', description: 'Note content (markdown supported)' },
             author_name: { type: 'string', description: 'Optional author name (defaults to agent_identifier)' },
           },
-          required: ['project_identifier', 'agent_identifier', 'parent_type', 'parent_id', 'content'],
+          required: ['project_identifier', 'user_id', 'parent_type', 'parent_id', 'content'],
         },
       },
       {
@@ -484,12 +564,12 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           type: 'object',
           properties: {
             project_identifier: { type: 'string', description: 'Project identifier' },
-            agent_identifier: { type: 'string', description: 'Agent identifier for attribution' },
+            user_id: { type: 'string', description: 'User ID performing the action' },
             id: { type: 'number', description: 'Note ID' },
             content: { type: 'string', description: 'New note content (markdown supported)' },
             author_name: { type: 'string', description: 'Optional author name' },
           },
-          required: ['project_identifier', 'agent_identifier', 'id', 'content'],
+          required: ['project_identifier', 'user_id', 'id', 'content'],
         },
       },
       {
@@ -499,10 +579,10 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           type: 'object',
           properties: {
             project_identifier: { type: 'string', description: 'Project identifier' },
-            agent_identifier: { type: 'string', description: 'Agent identifier for attribution' },
+            user_id: { type: 'string', description: 'User ID performing the action' },
             id: { type: 'number', description: 'Note ID' },
           },
-          required: ['project_identifier', 'agent_identifier', 'id'],
+          required: ['project_identifier', 'user_id', 'id'],
         },
       },
       {
@@ -512,11 +592,11 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           type: 'object',
           properties: {
             project_identifier: { type: 'string', description: 'Project identifier' },
-            agent_identifier: { type: 'string', description: 'Agent identifier for attribution' },
+            user_id: { type: 'string', description: 'User ID performing the action' },
             parent_type: { type: 'string', enum: ['project', 'epic', 'story', 'task'], description: 'Filter by parent entity type (optional)' },
             parent_id: { type: 'number', description: 'Filter by parent entity ID (optional)' },
           },
-          required: ['project_identifier', 'agent_identifier'],
+          required: ['project_identifier', 'user_id'],
         },
       },
       {
@@ -526,11 +606,11 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           type: 'object',
           properties: {
             project_identifier: { type: 'string', description: 'Project identifier' },
-            agent_identifier: { type: 'string', description: 'Agent identifier for attribution' },
+            user_id: { type: 'string', description: 'User ID performing the action' },
             entity_type: { type: 'string', enum: ['project', 'epic', 'story', 'task'], description: 'Type of entity' },
             entity_id: { type: 'number', description: 'ID of entity' },
           },
-          required: ['project_identifier', 'agent_identifier', 'entity_type', 'entity_id'],
+          required: ['project_identifier', 'user_id', 'entity_type', 'entity_id'],
         },
       },
       // Export tools
@@ -541,10 +621,10 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           type: 'object',
           properties: {
             project_identifier: { type: 'string', description: 'Project identifier' },
-            agent_identifier: { type: 'string', description: 'Agent identifier for attribution' },
+            user_id: { type: 'string', description: 'User ID performing the action' },
             output_dir: { type: 'string', description: 'Output directory path (default: .agile-backlog)' },
           },
-          required: ['project_identifier', 'agent_identifier'],
+          required: ['project_identifier', 'user_id'],
         },
       },
       // Sprint tools
@@ -555,7 +635,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           type: 'object',
           properties: {
             project_identifier: { type: 'string', description: 'Project identifier' },
-            agent_identifier: { type: 'string', description: 'Agent identifier for attribution' },
+            user_id: { type: 'string', description: 'User ID performing the action' },
             name: { type: 'string', description: 'Sprint name (e.g., "Sprint 23", "Q1 Iteration 1")' },
             goal: { type: 'string', description: 'Sprint goal or objective (optional)' },
             start_date: { type: 'string', description: 'Start date (YYYY-MM-DD format)' },
@@ -563,7 +643,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
             capacity_points: { type: 'number', description: 'Team capacity in story points (optional)' },
             status: { type: 'string', enum: ['planning', 'active', 'completed', 'cancelled'], description: 'Initial status (default: planning)' },
           },
-          required: ['project_identifier', 'agent_identifier', 'name', 'start_date', 'end_date'],
+          required: ['project_identifier', 'user_id', 'name', 'start_date', 'end_date'],
         },
       },
       {
@@ -573,10 +653,10 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           type: 'object',
           properties: {
             project_identifier: { type: 'string', description: 'Project identifier' },
-            agent_identifier: { type: 'string', description: 'Agent identifier for attribution' },
+            user_id: { type: 'string', description: 'User ID performing the action' },
             status: { type: 'string', enum: ['planning', 'active', 'completed', 'cancelled'], description: 'Filter by status (optional)' },
           },
-          required: ['project_identifier', 'agent_identifier'],
+          required: ['project_identifier', 'user_id'],
         },
       },
       {
@@ -586,10 +666,10 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           type: 'object',
           properties: {
             project_identifier: { type: 'string', description: 'Project identifier' },
-            agent_identifier: { type: 'string', description: 'Agent identifier for attribution' },
+            user_id: { type: 'string', description: 'User ID performing the action' },
             sprint_id: { type: 'number', description: 'Sprint ID' },
           },
-          required: ['project_identifier', 'agent_identifier', 'sprint_id'],
+          required: ['project_identifier', 'user_id', 'sprint_id'],
         },
       },
       {
@@ -599,7 +679,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           type: 'object',
           properties: {
             project_identifier: { type: 'string', description: 'Project identifier' },
-            agent_identifier: { type: 'string', description: 'Agent identifier for attribution' },
+            user_id: { type: 'string', description: 'User ID performing the action' },
             sprint_id: { type: 'number', description: 'Sprint ID' },
             name: { type: 'string', description: 'New sprint name (optional)' },
             goal: { type: 'string', description: 'New sprint goal (optional)' },
@@ -608,7 +688,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
             capacity_points: { type: 'number', description: 'New capacity (optional)' },
             status: { type: 'string', enum: ['planning', 'active', 'completed', 'cancelled'], description: 'New status (optional)' },
           },
-          required: ['project_identifier', 'agent_identifier', 'sprint_id'],
+          required: ['project_identifier', 'user_id', 'sprint_id'],
         },
       },
       {
@@ -618,10 +698,10 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           type: 'object',
           properties: {
             project_identifier: { type: 'string', description: 'Project identifier' },
-            agent_identifier: { type: 'string', description: 'Agent identifier for attribution' },
+            user_id: { type: 'string', description: 'User ID performing the action' },
             sprint_id: { type: 'number', description: 'Sprint ID' },
           },
-          required: ['project_identifier', 'agent_identifier', 'sprint_id'],
+          required: ['project_identifier', 'user_id', 'sprint_id'],
         },
       },
       {
@@ -631,11 +711,11 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           type: 'object',
           properties: {
             project_identifier: { type: 'string', description: 'Project identifier' },
-            agent_identifier: { type: 'string', description: 'Agent identifier for attribution' },
+            user_id: { type: 'string', description: 'User ID performing the action' },
             sprint_id: { type: 'number', description: 'Sprint ID' },
             story_id: { type: 'number', description: 'Story ID to add' },
           },
-          required: ['project_identifier', 'agent_identifier', 'sprint_id', 'story_id'],
+          required: ['project_identifier', 'user_id', 'sprint_id', 'story_id'],
         },
       },
       {
@@ -645,11 +725,11 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           type: 'object',
           properties: {
             project_identifier: { type: 'string', description: 'Project identifier' },
-            agent_identifier: { type: 'string', description: 'Agent identifier for attribution' },
+            user_id: { type: 'string', description: 'User ID performing the action' },
             sprint_id: { type: 'number', description: 'Sprint ID' },
             story_id: { type: 'number', description: 'Story ID to remove' },
           },
-          required: ['project_identifier', 'agent_identifier', 'sprint_id', 'story_id'],
+          required: ['project_identifier', 'user_id', 'sprint_id', 'story_id'],
         },
       },
       {
@@ -659,10 +739,10 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           type: 'object',
           properties: {
             project_identifier: { type: 'string', description: 'Project identifier' },
-            agent_identifier: { type: 'string', description: 'Agent identifier for attribution' },
+            user_id: { type: 'string', description: 'User ID performing the action' },
             sprint_id: { type: 'number', description: 'Sprint ID' },
           },
-          required: ['project_identifier', 'agent_identifier', 'sprint_id'],
+          required: ['project_identifier', 'user_id', 'sprint_id'],
         },
       },
       {
@@ -672,10 +752,10 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           type: 'object',
           properties: {
             project_identifier: { type: 'string', description: 'Project identifier' },
-            agent_identifier: { type: 'string', description: 'Agent identifier for attribution' },
+            user_id: { type: 'string', description: 'User ID performing the action' },
             sprint_id: { type: 'number', description: 'Sprint ID' },
           },
-          required: ['project_identifier', 'agent_identifier', 'sprint_id'],
+          required: ['project_identifier', 'user_id', 'sprint_id'],
         },
       },
       {
@@ -685,10 +765,10 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           type: 'object',
           properties: {
             project_identifier: { type: 'string', description: 'Project identifier' },
-            agent_identifier: { type: 'string', description: 'Agent identifier for attribution' },
+            user_id: { type: 'string', description: 'User ID performing the action' },
             sprint_id: { type: 'number', description: 'Sprint ID' },
           },
-          required: ['project_identifier', 'agent_identifier', 'sprint_id'],
+          required: ['project_identifier', 'user_id', 'sprint_id'],
         },
       },
       {
@@ -698,10 +778,10 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           type: 'object',
           properties: {
             project_identifier: { type: 'string', description: 'Project identifier' },
-            agent_identifier: { type: 'string', description: 'Agent identifier for attribution' },
+            user_id: { type: 'string', description: 'User ID performing the action' },
             sprint_count: { type: 'number', description: 'Number of recent sprints to analyze (default: 3)' },
           },
-          required: ['project_identifier', 'agent_identifier'],
+          required: ['project_identifier', 'user_id'],
         },
       },
       {
@@ -711,11 +791,11 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           type: 'object',
           properties: {
             project_identifier: { type: 'string', description: 'Project identifier' },
-            agent_identifier: { type: 'string', description: 'Agent identifier for attribution' },
+            user_id: { type: 'string', description: 'User ID performing the action' },
             sprint_id: { type: 'number', description: 'Sprint ID' },
             date: { type: 'string', description: 'Snapshot date (YYYY-MM-DD format, defaults to today)' },
           },
-          required: ['project_identifier', 'agent_identifier', 'sprint_id'],
+          required: ['project_identifier', 'user_id', 'sprint_id'],
         },
       },
     ],

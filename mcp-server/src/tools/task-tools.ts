@@ -10,8 +10,8 @@ export async function handleTaskTools(request: CallToolRequest, db: AgileDatabas
         const ctx = getProjectContext(
           db,
           args.project_identifier as string,
-          args.agent_identifier as string,
-          args.modified_by as string | undefined
+          args.user_id as string,
+          
         );
 
         // Validate story belongs to this project
@@ -22,8 +22,8 @@ export async function handleTaskTools(request: CallToolRequest, db: AgileDatabas
           title: args.title as string,
           description: args.description as string,
           status: args.status as any,
-          assignee: args.assignee as string | undefined,
-        }, ctx.agent_identifier, ctx.modified_by);
+          assigned_to: args.assigned_to as string | undefined,
+        });
 
         return {
           content: [
@@ -43,8 +43,8 @@ export async function handleTaskTools(request: CallToolRequest, db: AgileDatabas
         const ctx = getProjectContext(
           db,
           args.project_identifier as string,
-          args.agent_identifier as string,
-          args.modified_by as string | undefined
+          args.user_id as string,
+          
         );
 
         // Validate access to the task
@@ -56,7 +56,7 @@ export async function handleTaskTools(request: CallToolRequest, db: AgileDatabas
         }
 
         // Detect conflicts
-        const hasConflict = detectConflict(db, 'task', args.id as number, ctx.modified_by, ctx.agent_identifier);
+        const hasConflict = detectConflict(db, 'task', args.id as number, ctx.user_id);
 
         const task = db.updateTask({
           id: args.id as number,
@@ -64,8 +64,8 @@ export async function handleTaskTools(request: CallToolRequest, db: AgileDatabas
           title: args.title as string | undefined,
           description: args.description as string | undefined,
           status: args.status as any,
-          assignee: args.assignee as string | undefined,
-        }, ctx.agent_identifier, ctx.modified_by);
+          assigned_to: args.assigned_to as string | undefined,
+        });
 
         return {
           content: [
@@ -86,14 +86,14 @@ export async function handleTaskTools(request: CallToolRequest, db: AgileDatabas
         const ctx = getProjectContext(
           db,
           args.project_identifier as string,
-          args.agent_identifier as string
+          args.user_id as string
         );
 
         const tasks = db.listTasks({
           project_id: ctx.project_id,
           story_id: args.story_id as number | undefined,
           status: args.status as any,
-          assignee: args.assignee as string | undefined,
+          assigned_to: args.assigned_to as string | undefined,
         });
 
         return {
@@ -115,7 +115,7 @@ export async function handleTaskTools(request: CallToolRequest, db: AgileDatabas
         const ctx = getProjectContext(
           db,
           args.project_identifier as string,
-          args.agent_identifier as string
+          args.user_id as string
         );
 
         const task = db.getTask(args.id as number);
@@ -143,7 +143,7 @@ export async function handleTaskTools(request: CallToolRequest, db: AgileDatabas
         const ctx = getProjectContext(
           db,
           args.project_identifier as string,
-          args.agent_identifier as string
+          args.user_id as string
         );
 
         // Validate access

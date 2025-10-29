@@ -3,34 +3,42 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import type {
   Project,
+  User,
   Epic,
   Story,
   Task,
+  Bug,
   Dependency,
   Relationship,
   Note,
   Sprint,
   SprintStory,
+  SprintBug,
   SprintSnapshot,
   StatusTransition,
   SecurityLog,
   CreateProjectInput,
+  CreateUserInput,
   CreateEpicInput,
   CreateStoryInput,
   CreateTaskInput,
+  CreateBugInput,
   CreateDependencyInput,
   CreateRelationshipInput,
   CreateNoteInput,
   CreateSprintInput,
+  UpdateUserInput,
   UpdateNoteInput,
   UpdateProjectInput,
   UpdateEpicInput,
   UpdateStoryInput,
   UpdateTaskInput,
+  UpdateBugInput,
   UpdateSprintInput,
   EpicFilter,
   StoryFilter,
   TaskFilter,
+  BugFilter,
   RelationshipFilter,
   NoteFilter,
   SprintFilter,
@@ -285,6 +293,371 @@ export class AgileDatabase {
       console.error('[Migration] Adding acceptance_criteria to stories table...');
       this.db.exec('ALTER TABLE stories ADD COLUMN acceptance_criteria TEXT');
     }
+
+    // Migration 7: Create users table and replace agent_identifier/last_modified_by with assigned_to
+    const usersTableInfo = this.db.pragma('table_info(users)') as Array<{ name: string }>;
+    const epicsTableInfo7 = this.db.pragma('table_info(epics)') as Array<{ name: string }>;
+    const hasAssignedToInEpics = epicsTableInfo7.some(col => col.name === 'assigned_to');
+
+    if (usersTableInfo.length === 0 || !hasAssignedToInEpics) {
+      console.error('[Migration 7] Creating users table and migrating to assigned_to model...');
+
+      // Step 0: Clean up any temporary tables from previous failed migrations
+      this.db.exec(`
+        DROP TABLE IF EXISTS epics_new;
+        DROP TABLE IF EXISTS stories_new;
+        DROP TABLE IF EXISTS tasks_new;
+        DROP TABLE IF EXISTS bugs_new;
+        DROP TABLE IF EXISTS relationships_new;
+        DROP TABLE IF EXISTS sprints_new;
+        DROP TABLE IF EXISTS security_logs_new;
+      `);
+
+      // Step 1: Create users table if it doesn't exist
+      this.db.exec(`
+        CREATE TABLE IF NOT EXISTS users (
+          user_id TEXT PRIMARY KEY,
+          display_name TEXT NOT NULL,
+          user_type TEXT NOT NULL,
+          created_at TEXT NOT NULL DEFAULT (datetime('now')),
+          updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+          CHECK(user_type IN ('human', 'code_agent', 'doc_agent', 'qa_agent', 'system'))
+        )
+      `);
+
+      // Step 2: Insert default system users
+      this.db.exec(`
+        INSERT OR IGNORE INTO users (user_id, display_name, user_type)
+        VALUES
+          ('Human_Admin', 'Administrator', 'human'),
+          ('System', 'System', 'system'),
+          ('Web_UI', 'Web UI (Legacy)', 'system')
+      `);
+
+      // Step 3: Migrate existing agent_identifier AND last_modified_by values to users table
+      if (epicsTableInfo7.length > 0) {
+        // Collect ALL unique identifiers from both agent_identifier and last_modified_by columns
+        const existingUsers = this.db.prepare(`
+          SELECT DISTINCT user_id FROM (
+            SELECT agent_identifier as user_id FROM epics WHERE agent_identifier IS NOT NULL
+            UNION
+            SELECT last_modified_by as user_id FROM epics WHERE last_modified_by IS NOT NULL
+            UNION
+            SELECT agent_identifier as user_id FROM stories WHERE agent_identifier IS NOT NULL
+            UNION
+            SELECT last_modified_by as user_id FROM stories WHERE last_modified_by IS NOT NULL
+            UNION
+            SELECT agent_identifier as user_id FROM tasks WHERE agent_identifier IS NOT NULL
+            UNION
+            SELECT last_modified_by as user_id FROM tasks WHERE last_modified_by IS NOT NULL
+            UNION
+            SELECT assignee as user_id FROM tasks WHERE assignee IS NOT NULL
+            UNION
+            SELECT agent_identifier as user_id FROM bugs WHERE agent_identifier IS NOT NULL
+            UNION
+            SELECT last_modified_by as user_id FROM bugs WHERE last_modified_by IS NOT NULL
+            UNION
+            SELECT agent_identifier as user_id FROM relationships WHERE agent_identifier IS NOT NULL
+            UNION
+            SELECT agent_identifier as user_id FROM sprints WHERE agent_identifier IS NOT NULL
+            UNION
+            SELECT agent_identifier as user_id FROM security_logs WHERE agent_identifier IS NOT NULL
+          )
+        `).all() as Array<{ user_id: string }>;
+
+        const insertUser = this.db.prepare(`
+          INSERT OR IGNORE INTO users (user_id, display_name, user_type)
+          VALUES (?, ?, ?)
+        `);
+
+        for (const { user_id } of existingUsers) {
+          let userType: 'human' | 'code_agent' | 'doc_agent' | 'qa_agent' | 'system' = 'system';
+          const displayName = user_id.replace(/_/g, ' ');
+
+          const lowerUserId = user_id.toLowerCase();
+          if (lowerUserId.includes('code')) {
+            userType = 'code_agent';
+          } else if (lowerUserId.includes('doc')) {
+            userType = 'doc_agent';
+          } else if (lowerUserId.includes('qa')) {
+            userType = 'qa_agent';
+          } else if (lowerUserId.includes('human') || lowerUserId.includes('admin')) {
+            userType = 'human';
+          }
+
+          insertUser.run(user_id, displayName, userType);
+        }
+      }
+
+      // Step 4: Migrate tables (only if they have old columns)
+      // EPICS
+      if (epicsTableInfo7.length > 0 && !hasAssignedToInEpics) {
+        console.error('[Migration 7] Migrating epics table...');
+        this.db.exec(`
+          CREATE TABLE epics_new (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            project_id INTEGER NOT NULL,
+            title TEXT NOT NULL,
+            description TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'todo',
+            assigned_to TEXT,
+            created_at TEXT NOT NULL DEFAULT (datetime('now')),
+            updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+            FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
+            FOREIGN KEY (assigned_to) REFERENCES users (user_id) ON DELETE SET NULL
+          )
+        `);
+
+        this.db.exec(`
+          INSERT INTO epics_new (id, project_id, title, description, status, assigned_to, created_at, updated_at)
+          SELECT id, project_id, title, description, status,
+                 COALESCE(last_modified_by, agent_identifier),
+                 created_at, updated_at
+          FROM epics
+        `);
+
+        this.db.exec('DROP TABLE epics');
+        this.db.exec('ALTER TABLE epics_new RENAME TO epics');
+      }
+
+      // STORIES
+      const storiesTableInfo7 = this.db.pragma('table_info(stories)') as Array<{ name: string }>;
+      const hasAssignedToInStories = storiesTableInfo7.some(col => col.name === 'assigned_to');
+
+      if (storiesTableInfo7.length > 0 && !hasAssignedToInStories) {
+        console.error('[Migration 7] Migrating stories table...');
+        this.db.exec(`
+          CREATE TABLE stories_new (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            project_id INTEGER NOT NULL,
+            epic_id INTEGER,
+            title TEXT NOT NULL,
+            description TEXT NOT NULL,
+            acceptance_criteria TEXT,
+            status TEXT NOT NULL DEFAULT 'todo',
+            priority TEXT NOT NULL DEFAULT 'medium',
+            points INTEGER,
+            assigned_to TEXT,
+            created_at TEXT NOT NULL DEFAULT (datetime('now')),
+            updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+            FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
+            FOREIGN KEY (epic_id) REFERENCES epics (id) ON DELETE SET NULL,
+            FOREIGN KEY (assigned_to) REFERENCES users (user_id) ON DELETE SET NULL
+          )
+        `);
+
+        this.db.exec(`
+          INSERT INTO stories_new (id, project_id, epic_id, title, description, acceptance_criteria,
+                                   status, priority, points, assigned_to, created_at, updated_at)
+          SELECT id, project_id, epic_id, title, description, acceptance_criteria,
+                 status, priority, points,
+                 COALESCE(last_modified_by, agent_identifier),
+                 created_at, updated_at
+          FROM stories
+        `);
+
+        this.db.exec('DROP TABLE stories');
+        this.db.exec('ALTER TABLE stories_new RENAME TO stories');
+      }
+
+      // TASKS - merge assignee and agent_identifier into assigned_to, add task_type
+      const tasksTableInfo7 = this.db.pragma('table_info(tasks)') as Array<{ name: string }>;
+      const hasAssignedToInTasks = tasksTableInfo7.some(col => col.name === 'assigned_to');
+      const hasTaskType = tasksTableInfo7.some(col => col.name === 'task_type');
+
+      if (tasksTableInfo7.length > 0 && (!hasAssignedToInTasks || !hasTaskType)) {
+        console.error('[Migration 7] Migrating tasks table...');
+        this.db.exec(`
+          CREATE TABLE tasks_new (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            story_id INTEGER NOT NULL,
+            title TEXT NOT NULL,
+            description TEXT NOT NULL,
+            task_type TEXT DEFAULT 'Code Change',
+            status TEXT NOT NULL DEFAULT 'todo',
+            assigned_to TEXT,
+            created_at TEXT NOT NULL DEFAULT (datetime('now')),
+            updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+            FOREIGN KEY (story_id) REFERENCES stories (id) ON DELETE CASCADE,
+            FOREIGN KEY (assigned_to) REFERENCES users (user_id) ON DELETE SET NULL,
+            CHECK(task_type IN ('Code Change', 'Doc Change', 'Research', 'QA'))
+          )
+        `);
+
+        this.db.exec(`
+          INSERT INTO tasks_new (id, story_id, title, description, task_type, status, assigned_to, created_at, updated_at)
+          SELECT id, story_id, title, description, 'Code Change' as task_type, status,
+                 COALESCE(assignee, last_modified_by, agent_identifier),
+                 created_at, updated_at
+          FROM tasks
+        `);
+
+        this.db.exec('DROP TABLE tasks');
+        this.db.exec('ALTER TABLE tasks_new RENAME TO tasks');
+      }
+
+      // BUGS
+      const bugsTableInfo7 = this.db.pragma('table_info(bugs)') as Array<{ name: string }>;
+      const hasAssignedToInBugs = bugsTableInfo7.some(col => col.name === 'assigned_to');
+
+      if (bugsTableInfo7.length > 0 && !hasAssignedToInBugs) {
+        console.error('[Migration 7] Migrating bugs table...');
+        this.db.exec(`
+          CREATE TABLE bugs_new (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            project_id INTEGER NOT NULL,
+            story_id INTEGER,
+            title TEXT NOT NULL,
+            description TEXT NOT NULL,
+            severity TEXT NOT NULL DEFAULT 'major',
+            error_message TEXT,
+            status TEXT NOT NULL DEFAULT 'todo',
+            priority TEXT NOT NULL DEFAULT 'medium',
+            points INTEGER,
+            assigned_to TEXT,
+            created_at TEXT NOT NULL DEFAULT (datetime('now')),
+            updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+            FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
+            FOREIGN KEY (story_id) REFERENCES stories (id) ON DELETE SET NULL,
+            FOREIGN KEY (assigned_to) REFERENCES users (user_id) ON DELETE SET NULL
+          )
+        `);
+
+        this.db.exec(`
+          INSERT INTO bugs_new (id, project_id, story_id, title, description, severity, error_message,
+                                status, priority, points, assigned_to, created_at, updated_at)
+          SELECT id, project_id, story_id, title, description, severity, error_message,
+                 status, priority, points,
+                 COALESCE(last_modified_by, agent_identifier),
+                 created_at, updated_at
+          FROM bugs
+        `);
+
+        this.db.exec('DROP TABLE bugs');
+        this.db.exec('ALTER TABLE bugs_new RENAME TO bugs');
+      }
+
+      // RELATIONSHIPS
+      const relationshipsTableInfo7 = this.db.pragma('table_info(relationships)') as Array<{ name: string }>;
+      const hasCreatedByInRelationships = relationshipsTableInfo7.some(col => col.name === 'created_by');
+
+      if (relationshipsTableInfo7.length > 0 && !hasCreatedByInRelationships) {
+        console.error('[Migration 7] Migrating relationships table...');
+        this.db.exec(`
+          CREATE TABLE relationships_new (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            source_type TEXT NOT NULL,
+            source_id INTEGER NOT NULL,
+            target_type TEXT NOT NULL,
+            target_id INTEGER NOT NULL,
+            relationship_type TEXT NOT NULL,
+            project_id INTEGER NOT NULL,
+            created_by TEXT NOT NULL,
+            created_at TEXT NOT NULL DEFAULT (datetime('now')),
+            updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+            FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
+            FOREIGN KEY (created_by) REFERENCES users (user_id) ON DELETE RESTRICT,
+            UNIQUE(source_type, source_id, target_type, target_id, relationship_type)
+          )
+        `);
+
+        this.db.exec(`
+          INSERT INTO relationships_new (id, source_type, source_id, target_type, target_id,
+                                          relationship_type, project_id, created_by, created_at, updated_at)
+          SELECT id, source_type, source_id, target_type, target_id,
+                 relationship_type, project_id, agent_identifier,
+                 created_at, updated_at
+          FROM relationships
+        `);
+
+        this.db.exec('DROP TABLE relationships');
+        this.db.exec('ALTER TABLE relationships_new RENAME TO relationships');
+      }
+
+      // SPRINTS
+      const sprintsTableInfo7 = this.db.pragma('table_info(sprints)') as Array<{ name: string }>;
+      const hasCreatedByInSprints = sprintsTableInfo7.some(col => col.name === 'created_by');
+
+      if (sprintsTableInfo7.length > 0 && !hasCreatedByInSprints) {
+        console.error('[Migration 7] Migrating sprints table...');
+        this.db.exec(`
+          CREATE TABLE sprints_new (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            project_id INTEGER NOT NULL,
+            name TEXT NOT NULL,
+            goal TEXT,
+            start_date TEXT NOT NULL,
+            end_date TEXT NOT NULL,
+            capacity_points INTEGER,
+            status TEXT NOT NULL DEFAULT 'planning',
+            created_by TEXT,
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+            FOREIGN KEY (created_by) REFERENCES users (user_id) ON DELETE SET NULL
+          )
+        `);
+
+        this.db.exec(`
+          INSERT INTO sprints_new (id, project_id, name, goal, start_date, end_date, capacity_points,
+                                   status, created_by, created_at, updated_at)
+          SELECT id, project_id, name, goal, start_date, end_date, capacity_points,
+                 status, agent_identifier, created_at, updated_at
+          FROM sprints
+        `);
+
+        this.db.exec('DROP TABLE sprints');
+        this.db.exec('ALTER TABLE sprints_new RENAME TO sprints');
+      }
+
+      // SECURITY LOGS
+      const securityLogsTableInfo7 = this.db.pragma('table_info(security_logs)') as Array<{ name: string }>;
+      const hasUserIdInLogs = securityLogsTableInfo7.some(col => col.name === 'user_id');
+
+      if (securityLogsTableInfo7.length > 0 && !hasUserIdInLogs) {
+        console.error('[Migration 7] Migrating security_logs table...');
+        this.db.exec(`
+          CREATE TABLE security_logs_new (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            event_type TEXT NOT NULL,
+            project_id INTEGER,
+            user_id TEXT,
+            attempted_path TEXT NOT NULL,
+            entity_type TEXT NOT NULL,
+            entity_id INTEGER,
+            message TEXT NOT NULL,
+            created_at TEXT NOT NULL DEFAULT (datetime('now')),
+            FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE SET NULL,
+            FOREIGN KEY (user_id) REFERENCES users (user_id) ON DELETE SET NULL
+          )
+        `);
+
+        this.db.exec(`
+          INSERT INTO security_logs_new (id, event_type, project_id, user_id, attempted_path,
+                                          entity_type, entity_id, message, created_at)
+          SELECT id, event_type, project_id, agent_identifier, attempted_path,
+                 entity_type, entity_id, message, created_at
+          FROM security_logs
+        `);
+
+        this.db.exec('DROP TABLE security_logs');
+        this.db.exec('ALTER TABLE security_logs_new RENAME TO security_logs');
+      }
+
+      // Create indexes
+      this.db.exec(`
+        CREATE INDEX IF NOT EXISTS idx_epics_assigned ON epics(assigned_to);
+        CREATE INDEX IF NOT EXISTS idx_stories_assigned ON stories(assigned_to);
+        CREATE INDEX IF NOT EXISTS idx_tasks_assigned ON tasks(assigned_to);
+        CREATE INDEX IF NOT EXISTS idx_bugs_assigned ON bugs(assigned_to);
+        CREATE INDEX IF NOT EXISTS idx_relationships_created_by ON relationships(created_by);
+        CREATE INDEX IF NOT EXISTS idx_sprints_created_by ON sprints(created_by);
+        CREATE INDEX IF NOT EXISTS idx_security_logs_user ON security_logs(user_id);
+        CREATE INDEX IF NOT EXISTS idx_users_type ON users(user_type);
+      `);
+
+      console.error('[Migration 7] Successfully migrated to assigned_to/created_by model');
+    }
   }
 
   private initializeDatabase(): void {
@@ -354,6 +727,28 @@ export class AgileDatabase {
         last_modified_by TEXT,
         FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
         FOREIGN KEY (epic_id) REFERENCES epics (id) ON DELETE SET NULL
+      )
+    `);
+
+    // Create bugs table
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS bugs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        project_id INTEGER NOT NULL,
+        story_id INTEGER,
+        title TEXT NOT NULL,
+        description TEXT NOT NULL,
+        severity TEXT NOT NULL DEFAULT 'major',
+        error_message TEXT,
+        status TEXT NOT NULL DEFAULT 'todo',
+        priority TEXT NOT NULL DEFAULT 'medium',
+        points INTEGER,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+        agent_identifier TEXT,
+        last_modified_by TEXT,
+        FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
+        FOREIGN KEY (story_id) REFERENCES stories (id) ON DELETE SET NULL
       )
     `);
 
@@ -474,6 +869,23 @@ export class AgileDatabase {
       CREATE INDEX IF NOT EXISTS idx_sprint_stories_story ON sprint_stories(story_id);
     `);
 
+    // Create sprint_bugs junction table
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS sprint_bugs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        sprint_id INTEGER NOT NULL,
+        bug_id INTEGER NOT NULL,
+        added_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        added_by TEXT,
+        FOREIGN KEY (sprint_id) REFERENCES sprints(id) ON DELETE CASCADE,
+        FOREIGN KEY (bug_id) REFERENCES bugs(id) ON DELETE CASCADE,
+        UNIQUE(sprint_id, bug_id)
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_sprint_bugs_sprint ON sprint_bugs(sprint_id);
+      CREATE INDEX IF NOT EXISTS idx_sprint_bugs_bug ON sprint_bugs(bug_id);
+    `);
+
     // Create sprint_snapshots table for burndown tracking
     this.db.exec(`
       CREATE TABLE IF NOT EXISTS sprint_snapshots (
@@ -510,7 +922,7 @@ export class AgileDatabase {
 
   private initializeDefaultTransitions(): void {
     const transitions = [
-      // Epic, Story, and Task all have the same workflow
+      // Epic, Story, Task, and Bug all have the same workflow
       ['epic', 'todo', 'in_progress'],
       ['epic', 'in_progress', 'review'],
       ['epic', 'review', 'done'],
@@ -529,6 +941,12 @@ export class AgileDatabase {
       ['task', 'review', 'in_progress'],
       ['task', 'in_progress', 'blocked'],
       ['task', 'blocked', 'in_progress'],
+      ['bug', 'todo', 'in_progress'],
+      ['bug', 'in_progress', 'review'],
+      ['bug', 'review', 'done'],
+      ['bug', 'review', 'in_progress'],
+      ['bug', 'in_progress', 'blocked'],
+      ['bug', 'blocked', 'in_progress'],
     ];
 
     const insert = this.db.prepare(`
@@ -664,19 +1082,72 @@ export class AgileDatabase {
     return result?.project_id ?? null;
   }
 
-  // Epic operations
-  createEpic(input: CreateEpicInput, agentIdentifier?: string, modifiedBy?: string): Epic {
+  getProjectIdForBug(bugId: number): number | null {
+    const stmt = this.db.prepare('SELECT project_id FROM bugs WHERE id = ?');
+    const result = stmt.get(bugId) as { project_id: number } | undefined;
+    return result?.project_id ?? null;
+  }
+
+  // User operations
+  createUser(input: CreateUserInput): User {
     const stmt = this.db.prepare(`
-      INSERT INTO epics (project_id, title, description, status, agent_identifier, last_modified_by)
-      VALUES (?, ?, ?, ?, ?, ?)
+      INSERT INTO users (user_id, display_name, user_type)
+      VALUES (?, ?, ?)
+    `);
+    stmt.run(input.user_id, input.display_name, input.user_type);
+    return this.getUser(input.user_id)!;
+  }
+
+  getUser(user_id: string): User | null {
+    const stmt = this.db.prepare('SELECT * FROM users WHERE user_id = ?');
+    return stmt.get(user_id) as User | null;
+  }
+
+  listUsers(): User[] {
+    const stmt = this.db.prepare('SELECT * FROM users ORDER BY user_type, display_name');
+    return stmt.all() as User[];
+  }
+
+  updateUser(input: UpdateUserInput): User {
+    const updates: string[] = [];
+    const values: any[] = [];
+
+    if (input.display_name !== undefined) {
+      updates.push('display_name = ?');
+      values.push(input.display_name);
+    }
+    if (input.user_type !== undefined) {
+      updates.push('user_type = ?');
+      values.push(input.user_type);
+    }
+
+    updates.push('updated_at = datetime(\'now\')');
+    values.push(input.user_id);
+
+    const stmt = this.db.prepare(`
+      UPDATE users SET ${updates.join(', ')} WHERE user_id = ?
+    `);
+    stmt.run(...values);
+    return this.getUser(input.user_id)!;
+  }
+
+  deleteUser(user_id: string): void {
+    // Note: This will fail if user has assigned items due to FK constraints
+    this.db.prepare('DELETE FROM users WHERE user_id = ?').run(user_id);
+  }
+
+  // Epic operations
+  createEpic(input: CreateEpicInput): Epic {
+    const stmt = this.db.prepare(`
+      INSERT INTO epics (project_id, title, description, status, assigned_to)
+      VALUES (?, ?, ?, ?, ?)
     `);
     const result = stmt.run(
       input.project_id,
       input.title,
       input.description,
       input.status || 'todo',
-      agentIdentifier || null,
-      modifiedBy || null
+      input.assigned_to ?? null
     );
     return this.getEpic(result.lastInsertRowid as number)!;
   }
@@ -698,6 +1169,10 @@ export class AgileDatabase {
       query += ' AND status = ?';
       values.push(filter.status);
     }
+    if (filter?.assigned_to) {
+      query += ' AND assigned_to = ?';
+      values.push(filter.assigned_to);
+    }
 
     query += ' ORDER BY created_at DESC';
 
@@ -705,7 +1180,7 @@ export class AgileDatabase {
     return stmt.all(...values) as Epic[];
   }
 
-  updateEpic(input: UpdateEpicInput, agentIdentifier?: string, modifiedBy?: string): Epic {
+  updateEpic(input: UpdateEpicInput): Epic {
     const updates: string[] = [];
     const values: any[] = [];
 
@@ -721,12 +1196,12 @@ export class AgileDatabase {
       updates.push('status = ?');
       values.push(input.status);
     }
+    if (input.assigned_to !== undefined) {
+      updates.push('assigned_to = ?');
+      values.push(input.assigned_to);
+    }
 
     updates.push('updated_at = datetime(\'now\')');
-    updates.push('agent_identifier = ?');
-    values.push(agentIdentifier || null);
-    updates.push('last_modified_by = ?');
-    values.push(modifiedBy || null);
     values.push(input.id);
 
     const stmt = this.db.prepare(`
@@ -741,10 +1216,10 @@ export class AgileDatabase {
   }
 
   // Story operations
-  createStory(input: CreateStoryInput, agentIdentifier?: string, modifiedBy?: string): Story {
+  createStory(input: CreateStoryInput): Story {
     const stmt = this.db.prepare(`
-      INSERT INTO stories (project_id, epic_id, title, description, acceptance_criteria, status, priority, points, agent_identifier, last_modified_by)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO stories (project_id, epic_id, title, description, acceptance_criteria, status, priority, points, assigned_to)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
     const result = stmt.run(
       input.project_id,
@@ -755,8 +1230,7 @@ export class AgileDatabase {
       input.status || 'todo',
       input.priority || 'medium',
       input.points ?? null,
-      agentIdentifier || null,
-      modifiedBy || null
+      input.assigned_to ?? null
     );
     return this.getStory(result.lastInsertRowid as number)!;
   }
@@ -788,6 +1262,10 @@ export class AgileDatabase {
       query += ' AND priority = ?';
       values.push(filter.priority);
     }
+    if (filter?.assigned_to) {
+      query += ' AND assigned_to = ?';
+      values.push(filter.assigned_to);
+    }
     if (filter?.has_dependencies !== undefined) {
       if (filter.has_dependencies) {
         query += ' AND id IN (SELECT DISTINCT story_id FROM dependencies UNION SELECT DISTINCT depends_on_story_id FROM dependencies)';
@@ -802,7 +1280,7 @@ export class AgileDatabase {
     return stmt.all(...values) as Story[];
   }
 
-  updateStory(input: UpdateStoryInput, agentIdentifier?: string, modifiedBy?: string): Story {
+  updateStory(input: UpdateStoryInput): Story {
     const updates: string[] = [];
     const values: any[] = [];
 
@@ -834,12 +1312,12 @@ export class AgileDatabase {
       updates.push('points = ?');
       values.push(input.points);
     }
+    if (input.assigned_to !== undefined) {
+      updates.push('assigned_to = ?');
+      values.push(input.assigned_to);
+    }
 
     updates.push('updated_at = datetime(\'now\')');
-    updates.push('agent_identifier = ?');
-    values.push(agentIdentifier || null);
-    updates.push('last_modified_by = ?');
-    values.push(modifiedBy || null);
     values.push(input.id);
 
     const stmt = this.db.prepare(`
@@ -853,20 +1331,135 @@ export class AgileDatabase {
     this.db.prepare('DELETE FROM stories WHERE id = ?').run(id);
   }
 
-  // Task operations
-  createTask(input: CreateTaskInput, agentIdentifier?: string, modifiedBy?: string): Task {
+  // Bug operations
+  createBug(input: CreateBugInput): Bug {
     const stmt = this.db.prepare(`
-      INSERT INTO tasks (story_id, title, description, status, assignee, agent_identifier, last_modified_by)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO bugs (project_id, story_id, title, description, severity, error_message, status, priority, points, assigned_to)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+    const result = stmt.run(
+      input.project_id,
+      input.story_id ?? null,
+      input.title,
+      input.description,
+      input.severity,
+      input.error_message ?? null,
+      input.status || 'todo',
+      input.priority || 'medium',
+      input.points ?? null,
+      input.assigned_to ?? null
+    );
+    return this.getBug(result.lastInsertRowid as number)!;
+  }
+
+  getBug(id: number): Bug | null {
+    const stmt = this.db.prepare('SELECT * FROM bugs WHERE id = ?');
+    return stmt.get(id) as Bug | null;
+  }
+
+  listBugs(filter?: BugFilter): Bug[] {
+    let query = 'SELECT * FROM bugs WHERE 1=1';
+    const values: any[] = [];
+
+    if (filter?.project_id !== undefined) {
+      query += ' AND project_id = ?';
+      values.push(filter.project_id);
+    }
+    if (filter?.story_id !== undefined) {
+      query += ' AND story_id = ?';
+      values.push(filter.story_id);
+    }
+    if (filter?.status) {
+      query += ' AND status = ?';
+      values.push(filter.status);
+    }
+    if (filter?.priority) {
+      query += ' AND priority = ?';
+      values.push(filter.priority);
+    }
+    if (filter?.severity) {
+      query += ' AND severity = ?';
+      values.push(filter.severity);
+    }
+    if (filter?.assigned_to) {
+      query += ' AND assigned_to = ?';
+      values.push(filter.assigned_to);
+    }
+
+    query += ' ORDER BY created_at DESC';
+
+    const stmt = this.db.prepare(query);
+    return stmt.all(...values) as Bug[];
+  }
+
+  updateBug(input: UpdateBugInput): Bug {
+    const updates: string[] = [];
+    const values: any[] = [];
+
+    if (input.story_id !== undefined) {
+      updates.push('story_id = ?');
+      values.push(input.story_id);
+    }
+    if (input.title !== undefined) {
+      updates.push('title = ?');
+      values.push(input.title);
+    }
+    if (input.description !== undefined) {
+      updates.push('description = ?');
+      values.push(input.description);
+    }
+    if (input.severity !== undefined) {
+      updates.push('severity = ?');
+      values.push(input.severity);
+    }
+    if (input.error_message !== undefined) {
+      updates.push('error_message = ?');
+      values.push(input.error_message);
+    }
+    if (input.status !== undefined) {
+      updates.push('status = ?');
+      values.push(input.status);
+    }
+    if (input.priority !== undefined) {
+      updates.push('priority = ?');
+      values.push(input.priority);
+    }
+    if (input.points !== undefined) {
+      updates.push('points = ?');
+      values.push(input.points);
+    }
+    if (input.assigned_to !== undefined) {
+      updates.push('assigned_to = ?');
+      values.push(input.assigned_to);
+    }
+
+    updates.push('updated_at = datetime(\'now\')');
+    values.push(input.id);
+
+    const stmt = this.db.prepare(`
+      UPDATE bugs SET ${updates.join(', ')} WHERE id = ?
+    `);
+    stmt.run(...values);
+    return this.getBug(input.id)!;
+  }
+
+  deleteBug(id: number): void {
+    this.db.prepare('DELETE FROM bugs WHERE id = ?').run(id);
+  }
+
+  // Task operations
+  createTask(input: CreateTaskInput): Task {
+    const stmt = this.db.prepare(`
+      INSERT INTO tasks (story_id, title, description, task_type, status, assigned_to)
+      VALUES (?, ?, ?, ?, ?, ?)
     `);
     const result = stmt.run(
       input.story_id,
       input.title,
       input.description,
+      input.task_type || 'Code Change',
       input.status || 'todo',
-      input.assignee ?? null,
-      agentIdentifier || null,
-      modifiedBy || null
+      input.assigned_to ?? null
     );
     return this.getTask(result.lastInsertRowid as number)!;
   }
@@ -896,9 +1489,13 @@ export class AgileDatabase {
       query += ' AND t.status = ?';
       values.push(filter.status);
     }
-    if (filter?.assignee) {
-      query += ' AND t.assignee = ?';
-      values.push(filter.assignee);
+    if (filter?.task_type) {
+      query += ' AND t.task_type = ?';
+      values.push(filter.task_type);
+    }
+    if (filter?.assigned_to) {
+      query += ' AND t.assigned_to = ?';
+      values.push(filter.assigned_to);
     }
 
     query += ' ORDER BY t.created_at DESC';
@@ -907,7 +1504,7 @@ export class AgileDatabase {
     return stmt.all(...values) as Task[];
   }
 
-  updateTask(input: UpdateTaskInput, agentIdentifier?: string, modifiedBy?: string): Task {
+  updateTask(input: UpdateTaskInput): Task {
     const updates: string[] = [];
     const values: any[] = [];
 
@@ -923,20 +1520,20 @@ export class AgileDatabase {
       updates.push('description = ?');
       values.push(input.description);
     }
+    if (input.task_type !== undefined) {
+      updates.push('task_type = ?');
+      values.push(input.task_type);
+    }
     if (input.status !== undefined) {
       updates.push('status = ?');
       values.push(input.status);
     }
-    if (input.assignee !== undefined) {
-      updates.push('assignee = ?');
-      values.push(input.assignee);
+    if (input.assigned_to !== undefined) {
+      updates.push('assigned_to = ?');
+      values.push(input.assigned_to);
     }
 
     updates.push('updated_at = datetime(\'now\')');
-    updates.push('agent_identifier = ?');
-    values.push(agentIdentifier || null);
-    updates.push('last_modified_by = ?');
-    values.push(modifiedBy || null);
     values.push(input.id);
 
     const stmt = this.db.prepare(`
@@ -1025,7 +1622,7 @@ export class AgileDatabase {
     const stmt = this.db.prepare(`
       INSERT INTO relationships (
         source_type, source_id, target_type, target_id,
-        relationship_type, project_id, agent_identifier
+        relationship_type, project_id, created_by
       )
       VALUES (?, ?, ?, ?, ?, ?, ?)
     `);
@@ -1036,7 +1633,7 @@ export class AgileDatabase {
       input.target_id,
       input.relationship_type,
       input.project_id,
-      input.agent_identifier
+      input.created_by
     );
     return this.getRelationship(result.lastInsertRowid as number)!;
   }
@@ -1372,18 +1969,68 @@ export class AgileDatabase {
     return stmt.get(storyId) as Sprint | null;
   }
 
+  // Sprint-Bug association methods
+  addBugToSprint(sprintId: number, bugId: number, addedBy?: string): SprintBug {
+    const stmt = this.db.prepare(`
+      INSERT INTO sprint_bugs (sprint_id, bug_id, added_by)
+      VALUES (?, ?, ?)
+    `);
+    const result = stmt.run(sprintId, bugId, addedBy || null);
+
+    const getSt = this.db.prepare('SELECT * FROM sprint_bugs WHERE id = ?');
+    return getSt.get(result.lastInsertRowid) as SprintBug;
+  }
+
+  removeBugFromSprint(sprintId: number, bugId: number): void {
+    this.db.prepare(`
+      DELETE FROM sprint_bugs
+      WHERE sprint_id = ? AND bug_id = ?
+    `).run(sprintId, bugId);
+  }
+
+  getSprintBugs(sprintId: number): Bug[] {
+    const stmt = this.db.prepare(`
+      SELECT b.* FROM bugs b
+      INNER JOIN sprint_bugs sb ON b.id = sb.bug_id
+      WHERE sb.sprint_id = ?
+      ORDER BY sb.added_at
+    `);
+    return stmt.all(sprintId) as Bug[];
+  }
+
+  getBugCurrentSprint(bugId: number): Sprint | null {
+    const stmt = this.db.prepare(`
+      SELECT spr.* FROM sprints spr
+      INNER JOIN sprint_bugs sb ON spr.id = sb.sprint_id
+      WHERE sb.bug_id = ? AND spr.status IN ('planning', 'active')
+      ORDER BY spr.start_date DESC
+      LIMIT 1
+    `);
+    return stmt.get(bugId) as Sprint | null;
+  }
+
   // Sprint snapshot methods for burndown tracking
   createSprintSnapshot(sprintId: number, date?: string): SprintSnapshot {
     const snapshotDate = date || new Date().toISOString().split('T')[0];
 
-    // Calculate current metrics
+    // Calculate current metrics from stories and bugs
     const stories = this.getSprintStories(sprintId);
+    const bugs = this.getSprintBugs(sprintId);
     let completedPoints = 0;
     let remainingPoints = 0;
 
     for (const story of stories) {
       const points = story.points || 0;
       if (story.status === 'done') {
+        completedPoints += points;
+      } else {
+        remainingPoints += points;
+      }
+    }
+
+    for (const bug of bugs) {
+      const points = bug.points || 0;
+      if (bug.status === 'done') {
         completedPoints += points;
       } else {
         remainingPoints += points;
@@ -1431,6 +2078,7 @@ export class AgileDatabase {
     }
 
     const stories = this.getSprintStories(sprintId);
+    const bugs = this.getSprintBugs(sprintId);
     let committedPoints = 0;
     let completedPoints = 0;
     let remainingPoints = 0;
@@ -1439,6 +2087,16 @@ export class AgileDatabase {
       const points = story.points || 0;
       committedPoints += points;
       if (story.status === 'done') {
+        completedPoints += points;
+      } else {
+        remainingPoints += points;
+      }
+    }
+
+    for (const bug of bugs) {
+      const points = bug.points || 0;
+      committedPoints += points;
+      if (bug.status === 'done') {
         completedPoints += points;
       } else {
         remainingPoints += points;

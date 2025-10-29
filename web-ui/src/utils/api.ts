@@ -1,7 +1,7 @@
 import type {
-  Epic, Story, Task, Dependency, DependencyGraph, HierarchyNode,
+  Epic, Story, Task, Bug, Dependency, DependencyGraph, HierarchyNode,
   Relationship, Note, EntityType, Sprint, SprintCapacity, SprintSnapshot,
-  SprintReport
+  SprintReport, User
 } from '../types';
 
 const API_BASE = '/api';
@@ -62,6 +62,24 @@ export const api = {
       body: JSON.stringify(data),
     }),
     delete: (id: number) => fetchJson<void>(`/stories/${id}`, { method: 'DELETE' }),
+  },
+
+  // Bugs
+  bugs: {
+    list: (filters?: Record<string, any>) => {
+      const params = new URLSearchParams(filters).toString();
+      return fetchJson<Bug[]>(`/bugs${params ? `?${params}` : ''}`);
+    },
+    get: (id: number) => fetchJson<{ bug: Bug }>(`/bugs/${id}`),
+    create: (data: Partial<Bug>) => fetchJson<Bug>('/bugs', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+    update: (id: number, data: Partial<Bug>) => fetchJson<Bug>(`/bugs/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    }),
+    delete: (id: number) => fetchJson<void>(`/bugs/${id}`, { method: 'DELETE' }),
   },
 
   // Tasks
@@ -149,7 +167,7 @@ export const api = {
       return fetchJson<Sprint[]>(`/sprints${params ? `?${params}` : ''}`);
     },
     get: (id: number) =>
-      fetchJson<{ sprint: Sprint; stories: Story[]; capacity: SprintCapacity }>(`/sprints/${id}`),
+      fetchJson<{ sprint: Sprint; stories: Story[]; bugs: Bug[]; capacity: SprintCapacity }>(`/sprints/${id}`),
     create: (data: Partial<Sprint>) => fetchJson<Sprint>('/sprints', {
       method: 'POST',
       body: JSON.stringify(data),
@@ -165,6 +183,14 @@ export const api = {
       }),
     removeStory: (sprintId: number, storyId: number) =>
       fetchJson<{ success: boolean; capacity: SprintCapacity }>(`/sprints/${sprintId}/stories/${storyId}`, {
+        method: 'DELETE',
+      }),
+    addBug: (sprintId: number, bugId: number) =>
+      fetchJson<{ success: boolean; capacity: SprintCapacity }>(`/sprints/${sprintId}/bugs/${bugId}`, {
+        method: 'POST',
+      }),
+    removeBug: (sprintId: number, bugId: number) =>
+      fetchJson<{ success: boolean; capacity: SprintCapacity }>(`/sprints/${sprintId}/bugs/${bugId}`, {
         method: 'DELETE',
       }),
     start: (id: number) =>
@@ -197,5 +223,11 @@ export const api = {
         method: 'POST',
         body: JSON.stringify({ date }),
       }),
+  },
+
+  // Users
+  users: {
+    list: () => fetchJson<User[]>('/users'),
+    get: (userId: string) => fetchJson<User>(`/users/${userId}`),
   },
 };

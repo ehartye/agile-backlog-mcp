@@ -1,13 +1,15 @@
 import { useState, useEffect } from 'react';
 import { X } from 'lucide-react';
+import { UserSelector } from './UserSelector';
 
 interface Task {
   id?: number;
   story_id: number;
   title: string;
   description: string;
+  task_type?: 'Code Change' | 'Doc Change' | 'Research' | 'QA';
   status: 'todo' | 'in_progress' | 'review' | 'done' | 'blocked';
-  assignee?: string;
+  assigned_to?: string;
 }
 
 interface Story {
@@ -29,8 +31,9 @@ export default function TaskFormModal({ isOpen, onClose, onSave, task, projectId
     story_id: defaultStoryId || 0,
     title: '',
     description: '',
+    task_type: 'Code Change',
     status: 'todo',
-    assignee: '',
+    assigned_to: '',
   });
   const [stories, setStories] = useState<Story[]>([]);
 
@@ -48,8 +51,9 @@ export default function TaskFormModal({ isOpen, onClose, onSave, task, projectId
         story_id: defaultStoryId || 0,
         title: '',
         description: '',
+        task_type: 'Code Change',
         status: 'todo',
-        assignee: '',
+        assigned_to: '',
       });
     }
   }, [task, defaultStoryId]);
@@ -140,6 +144,20 @@ export default function TaskFormModal({ isOpen, onClose, onSave, task, projectId
             />
           </div>
 
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Task Type</label>
+            <select
+              value={formData.task_type || 'Code Change'}
+              onChange={(e) => setFormData({ ...formData, task_type: e.target.value as Task['task_type'] })}
+              className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="Code Change">Code Change</option>
+              <option value="Doc Change">Doc Change</option>
+              <option value="Research">Research</option>
+              <option value="QA">QA</option>
+            </select>
+          </div>
+
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
@@ -157,12 +175,10 @@ export default function TaskFormModal({ isOpen, onClose, onSave, task, projectId
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Assignee</label>
-              <input
-                type="text"
-                value={formData.assignee || ''}
-                onChange={(e) => setFormData({ ...formData, assignee: e.target.value })}
-                className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+              <UserSelector
+                value={formData.assigned_to || null}
+                onChange={(userId) => setFormData({ ...formData, assigned_to: userId || undefined })}
+                label="Assigned To"
                 placeholder="Optional"
               />
             </div>

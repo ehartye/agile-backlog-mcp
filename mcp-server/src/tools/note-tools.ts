@@ -11,7 +11,7 @@ export async function handleNoteTools(request: CallToolRequest, db: AgileDatabas
       const ctx = getProjectContext(
         db,
         args.project_identifier as string,
-        args.agent_identifier as string
+        args.user_id as string
       );
 
       // Validate parent entity belongs to this project (skip for project entities)
@@ -24,7 +24,7 @@ export async function handleNoteTools(request: CallToolRequest, db: AgileDatabas
         parent_type: args.parent_type as EntityType,
         parent_id: args.parent_id as number,
         content: args.content as string,
-        agent_identifier: ctx.agent_identifier,
+        agent_identifier: ctx.user_id,
         author_name: args.author_name as string | null | undefined,
         project_id: ctx.project_id,
       });
@@ -47,7 +47,7 @@ export async function handleNoteTools(request: CallToolRequest, db: AgileDatabas
       const ctx = getProjectContext(
         db,
         args.project_identifier as string,
-        args.agent_identifier as string
+        args.user_id as string
       );
 
       // Get the note first to validate project access
@@ -64,7 +64,7 @@ export async function handleNoteTools(request: CallToolRequest, db: AgileDatabas
       const note = db.updateNote({
         id: args.id as number,
         content: args.content as string,
-        agent_identifier: ctx.agent_identifier,
+        agent_identifier: ctx.user_id,
         author_name: args.author_name as string | null | undefined,
       });
 
@@ -86,7 +86,7 @@ export async function handleNoteTools(request: CallToolRequest, db: AgileDatabas
       const ctx = getProjectContext(
         db,
         args.project_identifier as string,
-        args.agent_identifier as string
+        args.user_id as string
       );
 
       // Get the note first to validate project access
@@ -119,7 +119,7 @@ export async function handleNoteTools(request: CallToolRequest, db: AgileDatabas
       const ctx = getProjectContext(
         db,
         args.project_identifier as string,
-        args.agent_identifier as string
+        args.user_id as string
       );
 
       const filters: any = {
@@ -136,8 +136,8 @@ export async function handleNoteTools(request: CallToolRequest, db: AgileDatabas
           validateProjectAccess(db, ctx, args.parent_type as 'epic' | 'story' | 'task', args.parent_id as number);
         }
       }
-      if (args.agent_identifier !== undefined) {
-        filters.agent_identifier = args.agent_identifier;
+      if (args.user_id !== undefined) {
+        filters.agent_identifier = args.user_id;
       }
 
       const notes = db.listNotes(filters);
@@ -161,7 +161,7 @@ export async function handleNoteTools(request: CallToolRequest, db: AgileDatabas
       const ctx = getProjectContext(
         db,
         args.project_identifier as string,
-        args.agent_identifier as string
+        args.user_id as string
       );
 
       // Validate entity belongs to this project (skip for project entities)

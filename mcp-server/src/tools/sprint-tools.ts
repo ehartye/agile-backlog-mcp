@@ -21,7 +21,7 @@ export async function handleSprintTools(request: CallToolRequest, db: AgileDatab
           end_date: args.end_date as string,
           capacity_points: args.capacity_points as number | undefined,
           status: args.status as any,
-        }, ctx.agent_identifier);
+        }, ctx.user_id);
 
         return {
           content: [
@@ -131,7 +131,7 @@ export async function handleSprintTools(request: CallToolRequest, db: AgileDatab
           end_date: args.end_date as string | undefined,
           capacity_points: args.capacity_points as number | undefined,
           status: args.status as any,
-        }, ctx.agent_identifier);
+        }, ctx.user_id);
 
         return {
           content: [
@@ -217,7 +217,7 @@ export async function handleSprintTools(request: CallToolRequest, db: AgileDatab
           throw new Error(`Story ${args.story_id} is already in sprint '${currentSprint.name}' (ID: ${currentSprint.id})`);
         }
 
-        db.addStoryToSprint(args.sprint_id as number, args.story_id as number, ctx.agent_identifier);
+        db.addStoryToSprint(args.sprint_id as number, args.story_id as number, ctx.user_id);
 
         const capacity = db.calculateSprintCapacity(args.sprint_id as number);
 
@@ -303,7 +303,7 @@ export async function handleSprintTools(request: CallToolRequest, db: AgileDatab
         const updated = db.updateSprint({
           id: args.sprint_id as number,
           status: 'active',
-        }, ctx.agent_identifier);
+        }, ctx.user_id);
 
         // Create initial snapshot
         const snapshot = db.createSprintSnapshot(args.sprint_id as number);
@@ -355,7 +355,7 @@ export async function handleSprintTools(request: CallToolRequest, db: AgileDatab
         const updated = db.updateSprint({
           id: args.sprint_id as number,
           status: 'completed',
-        }, ctx.agent_identifier);
+        }, ctx.user_id);
 
         // Generate sprint report
         const stories = db.getSprintStories(sprint.id);

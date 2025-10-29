@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react';
 import { Link, useParams, useNavigate } from 'react-router-dom';
-import { Plus, Edit, Trash, ChevronDown, ChevronUp, Calendar, PlayCircle } from 'lucide-react';
+import { Plus, Edit, Trash, ChevronDown, ChevronUp, Calendar, PlayCircle, Bug as BugIcon } from 'lucide-react';
 import { api } from '../utils/api';
-import type { Epic, Story, EntityStatus, Priority, Sprint } from '../types';
+import type { Epic, Story, Bug, EntityStatus, Priority, BugSeverity, Sprint, User } from '../types';
 import EpicFormModal from './EpicFormModal';
 import StoryFormModal from './StoryFormModal';
+import BugFormModal from './BugFormModal';
 import RelationshipManager from './RelationshipManager';
 import NotesPanel from './NotesPanel';
 import SprintFormModal from './SprintFormModal';
@@ -24,6 +25,13 @@ const priorityColors: Record<Priority, string> = {
   critical: 'text-red-600 font-bold',
 };
 
+const severityColors: Record<BugSeverity, string> = {
+  trivial: 'bg-gray-100 text-gray-700 border-gray-300',
+  minor: 'bg-yellow-100 text-yellow-700 border-yellow-300',
+  major: 'bg-orange-100 text-orange-700 border-orange-300',
+  critical: 'bg-red-100 text-red-700 border-red-300',
+};
+
 interface BacklogListViewProps {
   projectId?: number | null;
 }
@@ -35,20 +43,26 @@ export default function BacklogListView({ projectId: projectIdProp }: BacklogLis
 
   const [epics, setEpics] = useState<Epic[]>([]);
   const [stories, setStories] = useState<Story[]>([]);
+  const [bugs, setBugs] = useState<Bug[]>([]);
   const [sprints, setSprints] = useState<Sprint[]>([]);
+  const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [filters, setFilters] = useState({
     epic_id: '',
     status: '',
     priority: '',
     sprint_id: '',
+    severity: '',
   });
   const [epicModalOpen, setEpicModalOpen] = useState(false);
   const [storyModalOpen, setStoryModalOpen] = useState(false);
+  const [bugModalOpen, setBugModalOpen] = useState(false);
   const [sprintModalOpen, setSprintModalOpen] = useState(false);
   const [editingEpic, setEditingEpic] = useState<Epic | null>(null);
   const [editingStory, setEditingStory] = useState<Story | null>(null);
+  const [editingBug, setEditingBug] = useState<Bug | null>(null);
   const [expandedStoryId, setExpandedStoryId] = useState<number | null>(null);
+  const [expandedBugId, setExpandedBugId] = useState<number | null>(null);
 
   useEffect(() => {
     loadData();
@@ -64,14 +78,18 @@ export default function BacklogListView({ projectId: projectIdProp }: BacklogLis
         filterParams.project_id = projectId;
       }
 
-      const [epicsData, storiesData, sprintsData] = await Promise.all([
+      const [epicsData, storiesData, bugsData, sprintsData, usersData] = await Promise.all([
         api.epics.list(projectId ? { project_id: projectId } : {}),
         api.stories.list(filterParams),
+        api.bugs.list(filterParams),
         projectId ? api.sprints.list({ project_id: projectId }) : Promise.resolve([]),
+        api.users.list(),
       ]);
       setEpics(epicsData);
       setStories(storiesData);
+      setBugs(bugsData);
       setSprints(sprintsData);
+      setUsers(usersData);
     } catch (error) {
       console.error('Failed to load data:', error);
     } finally {
@@ -94,6 +112,21 @@ export default function BacklogListView({ projectId: projectIdProp }: BacklogLis
     setStoryModalOpen(true);
   };
 
+  const handleDeleteBug = async (id: number) => {
+    if (!confirm('Are you sure you want to delete this bug?')) return;
+    try {
+      await api.bugs.delete(id);
+      loadData();
+    } catch (error) {
+      console.error('Failed to delete bug:', error);
+    }
+  };
+
+  const handleEditBug = (bug: Bug) => {
+    setEditingBug(bug);
+    setBugModalOpen(true);
+  };
+
   const handleNewEpic = () => {
     setEditingEpic(null);
     setEpicModalOpen(true);
@@ -102,6 +135,11 @@ export default function BacklogListView({ projectId: projectIdProp }: BacklogLis
   const handleNewStory = () => {
     setEditingStory(null);
     setStoryModalOpen(true);
+  };
+
+  const handleNewBug = () => {
+    setEditingBug(null);
+    setBugModalOpen(true);
   };
 
   const handleNewSprint = () => {
@@ -118,6 +156,12 @@ export default function BacklogListView({ projectId: projectIdProp }: BacklogLis
   const getEpicName = (epicId: number | null) => {
     if (!epicId) return 'No Epic';
     return epics.find(e => e.id === epicId)?.title || `Epic #${epicId}`;
+  };
+
+  const getUserDisplay = (userId: string | null | undefined) => {
+    if (!userId) return null;
+    const user = users.find(u => u.user_id === userId);
+    return user ? `${user.display_name}` : userId;
   };
 
   if (loading) {
@@ -144,7 +188,7 @@ export default function BacklogListView({ projectId: projectIdProp }: BacklogLis
           <div>
             <h2 className="text-xl md:text-2xl font-bold text-gray-800">Backlog</h2>
             <p className="text-sm text-gray-500 mt-1">
-              {stories.length} stories across {epics.length} epics • {sprints.length} sprints
+              {stories.length} stories • {bugs.length} bugs • {epics.length} epics • {sprints.length} sprints
             </p>
           </div>
           <div className="flex flex-wrap gap-2 w-full sm:w-auto">
@@ -161,6 +205,13 @@ export default function BacklogListView({ projectId: projectIdProp }: BacklogLis
             >
               <Plus size={16} />
               <span className="hidden sm:inline">New</span> Story
+            </button>
+            <button
+              onClick={handleNewBug}
+              className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 text-sm"
+            >
+              <BugIcon size={16} />
+              <span className="hidden sm:inline">Quick</span> Bug
             </button>
             <button
               onClick={handleNewSprint}
@@ -234,23 +285,143 @@ export default function BacklogListView({ projectId: projectIdProp }: BacklogLis
           <option value="critical">Critical</option>
         </select>
 
+        <select
+          value={filters.severity}
+          onChange={(e) => setFilters({ ...filters, severity: e.target.value })}
+          className="px-3 py-2 border rounded-lg text-sm"
+        >
+          <option value="">All Severities</option>
+          <option value="critical">Critical</option>
+          <option value="major">Major</option>
+          <option value="minor">Minor</option>
+          <option value="trivial">Trivial</option>
+        </select>
+
         <button
-          onClick={() => setFilters({ epic_id: '', status: '', priority: '', sprint_id: '' })}
+          onClick={() => setFilters({ epic_id: '', status: '', priority: '', sprint_id: '', severity: '' })}
           className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800"
         >
           Clear Filters
         </button>
       </div>
 
-      {/* Story List */}
+      {/* Stories and Bugs List */}
       <div className="flex-1 overflow-auto p-4 md:p-6">
         <div className="max-w-6xl mx-auto space-y-3">
-          {stories.length === 0 ? (
+          {stories.length === 0 && bugs.length === 0 ? (
             <div className="text-center py-12 text-gray-500">
-              No stories found
+              No stories or bugs found
             </div>
           ) : (
-            stories.map(story => (
+            <>
+              {/* Bugs Section */}
+              {bugs.length > 0 && (
+                <div className="mb-6">
+                  <h3 className="text-lg font-semibold text-gray-800 mb-3 flex items-center gap-2">
+                    <BugIcon size={20} className="text-red-600" />
+                    Bugs ({bugs.length})
+                  </h3>
+                  {bugs.map(bug => (
+                    <div
+                      key={bug.id}
+                      className="bg-white rounded-lg border-2 border-red-200 p-3 md:p-4 hover:shadow-md transition-shadow mb-3"
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex flex-wrap items-center gap-2 mb-2">
+                            <BugIcon size={16} className="text-red-600 shrink-0" />
+                            <span className="text-base md:text-lg font-semibold text-gray-800 break-words">
+                              {bug.title}
+                            </span>
+                            <span className={`px-2 py-1 rounded text-xs whitespace-nowrap border ${severityColors[bug.severity]}`}>
+                              {bug.severity.toUpperCase()}
+                            </span>
+                            <span className={`px-2 py-1 rounded text-xs whitespace-nowrap ${statusColors[bug.status]}`}>
+                              {bug.status.replace('_', ' ')}
+                            </span>
+                            <span className={`text-xs md:text-sm whitespace-nowrap ${priorityColors[bug.priority]}`}>
+                              {bug.priority.toUpperCase()}
+                            </span>
+                          </div>
+                          <p className="text-sm text-gray-600 mb-2 break-words">{bug.description}</p>
+                          {bug.error_message && (
+                            <div className="mb-3 p-3 bg-red-50 rounded border-l-4 border-red-500">
+                              <div className="text-xs font-semibold text-red-700 mb-1">Error Message:</div>
+                              <pre className="text-xs text-red-800 whitespace-pre-wrap font-mono overflow-x-auto">
+                                {bug.error_message}
+                              </pre>
+                            </div>
+                          )}
+                          <div className="flex flex-wrap items-center gap-2 md:gap-4 text-xs text-gray-500">
+                            <span>#{bug.id}</span>
+                            {bug.story_id && <span>Story #{bug.story_id}</span>}
+                            {bug.points && <span>{bug.points} points</span>}
+                            {bug.assigned_to && <span className="text-blue-600">👤 {getUserDisplay(bug.assigned_to)}</span>}
+                          </div>
+                        </div>
+                        <div className="flex flex-col sm:flex-row gap-1 sm:gap-2 shrink-0">
+                          <button
+                            onClick={() => handleEditBug(bug)}
+                            className="p-2 text-blue-600 hover:bg-blue-50 rounded"
+                            title="Edit bug"
+                          >
+                            <Edit size={16} />
+                          </button>
+                          <button
+                            onClick={() => handleDeleteBug(bug.id)}
+                            className="p-2 text-red-600 hover:bg-red-50 rounded"
+                            title="Delete bug"
+                          >
+                            <Trash size={16} />
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Expand/Collapse Button */}
+                      <button
+                        onClick={() => setExpandedBugId(expandedBugId === bug.id ? null : bug.id)}
+                        className="w-full mt-3 py-2 text-sm text-gray-600 hover:bg-gray-50 rounded border border-gray-200 flex items-center justify-center gap-2"
+                      >
+                        {expandedBugId === bug.id ? (
+                          <>
+                            <ChevronUp size={16} />
+                            Hide Details
+                          </>
+                        ) : (
+                          <>
+                            <ChevronDown size={16} />
+                            View Details
+                          </>
+                        )}
+                      </button>
+
+                      {/* Expandable Details Section */}
+                      {expandedBugId === bug.id && (
+                        <div className="mt-4 space-y-4 border-t pt-4">
+                          <RelationshipManager
+                            entityType="bug"
+                            entityId={bug.id}
+                            projectId={projectId}
+                          />
+                          <NotesPanel
+                            entityType="bug"
+                            entityId={bug.id}
+                            projectId={projectId}
+                          />
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Stories Section */}
+              {stories.length > 0 && (
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-800 mb-3">
+                    Stories ({stories.length})
+                  </h3>
+                  {stories.map(story => (
               <div
                 key={story.id}
                 className="bg-white rounded-lg border p-3 md:p-4 hover:shadow-md transition-shadow"
@@ -282,6 +453,7 @@ export default function BacklogListView({ projectId: projectIdProp }: BacklogLis
                       <span>#{story.id}</span>
                       <span className="break-all">{getEpicName(story.epic_id)}</span>
                       {story.points && <span>{story.points} points</span>}
+                      {story.assigned_to && <span className="text-blue-600">👤 {getUserDisplay(story.assigned_to)}</span>}
                     </div>
                   </div>
                   <div className="flex flex-col sm:flex-row gap-1 sm:gap-2 shrink-0">
@@ -336,8 +508,11 @@ export default function BacklogListView({ projectId: projectIdProp }: BacklogLis
                   </div>
                 )}
               </div>
-            ))
-          )}
+            ))}
+          </div>
+        )}
+      </>
+    )}
         </div>
       </div>
 
@@ -355,6 +530,17 @@ export default function BacklogListView({ projectId: projectIdProp }: BacklogLis
         onClose={() => setStoryModalOpen(false)}
         onSave={loadData}
         story={editingStory}
+        projectId={projectId}
+      />
+
+      <BugFormModal
+        isOpen={bugModalOpen}
+        onClose={() => {
+          setBugModalOpen(false);
+          setEditingBug(null);
+        }}
+        onSave={loadData}
+        bug={editingBug}
         projectId={projectId}
       />
 

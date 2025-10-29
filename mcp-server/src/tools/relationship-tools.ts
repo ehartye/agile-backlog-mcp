@@ -11,7 +11,7 @@ export async function handleRelationshipTools(request: CallToolRequest, db: Agil
       const ctx = getProjectContext(
         db,
         args.project_identifier as string,
-        args.agent_identifier as string
+        args.user_id as string
       );
 
       // Validate both source and target belong to this project (skip for project entities)
@@ -33,7 +33,7 @@ export async function handleRelationshipTools(request: CallToolRequest, db: Agil
           target_id: args.target_id as number,
           relationship_type: args.relationship_type as RelationshipType,
           project_id: ctx.project_id,
-          agent_identifier: ctx.agent_identifier,
+          created_by: ctx.user_id,
         });
 
         return {
@@ -67,7 +67,7 @@ export async function handleRelationshipTools(request: CallToolRequest, db: Agil
       const ctx = getProjectContext(
         db,
         args.project_identifier as string,
-        args.agent_identifier as string
+        args.user_id as string
       );
 
       // Get the relationship first to validate project access
@@ -100,7 +100,7 @@ export async function handleRelationshipTools(request: CallToolRequest, db: Agil
       const ctx = getProjectContext(
         db,
         args.project_identifier as string,
-        args.agent_identifier as string
+        args.user_id as string
       );
 
       const filters: any = {
@@ -152,7 +152,7 @@ export async function handleRelationshipTools(request: CallToolRequest, db: Agil
       const ctx = getProjectContext(
         db,
         args.project_identifier as string,
-        args.agent_identifier as string
+        args.user_id as string
       );
 
       // Validate entity belongs to this project (skip for project entities)

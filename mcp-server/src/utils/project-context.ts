@@ -10,8 +10,7 @@ export class ProjectContextError extends Error {
 export function getProjectContext(
   db: AgileDatabase,
   projectIdentifier: string,
-  agentIdentifier: string,
-  modifiedBy?: string
+  userId: string
 ): ProjectContext {
   // Try to find a project that matches this identifier
   const project = db.getProjectByIdentifier(projectIdentifier);
@@ -25,7 +24,7 @@ export function getProjectContext(
       `Attempted to access unregistered project: ${projectIdentifier}`,
       null,
       null,
-      agentIdentifier
+      userId
     );
 
     throw new ProjectContextError(
@@ -38,15 +37,14 @@ export function getProjectContext(
     project_identifier: projectIdentifier,
     project_id: project.id,
     project_name: project.name,
-    agent_identifier: agentIdentifier,
-    modified_by: modifiedBy || agentIdentifier,
+    user_id: userId,
   };
 }
 
 export function validateProjectAccess(
   db: AgileDatabase,
   projectContext: ProjectContext,
-  entityType: 'epic' | 'story' | 'task',
+  entityType: 'epic' | 'story' | 'task' | 'bug',
   entityId: number
 ): void {
   let actualProjectId: number | null = null;
@@ -61,6 +59,9 @@ export function validateProjectAccess(
     case 'task':
       actualProjectId = db.getProjectIdForTask(entityId);
       break;
+    case 'bug':
+      actualProjectId = db.getProjectIdForBug(entityId);
+      break;
   }
 
   if (actualProjectId !== projectContext.project_id) {
@@ -72,7 +73,7 @@ export function validateProjectAccess(
       `Attempted to access ${entityType} #${entityId} from project #${projectContext.project_id}, but it belongs to project #${actualProjectId}`,
       projectContext.project_id,
       entityId,
-      projectContext.agent_identifier
+      projectContext.user_id
     );
 
     throw new ProjectContextError(
@@ -84,52 +85,13 @@ export function validateProjectAccess(
 
 export function detectConflict(
   db: AgileDatabase,
-  entityType: 'epic' | 'story' | 'task',
+  entityType: 'epic' | 'story' | 'task' | 'bug',
   entityId: number,
-  currentModifiedBy: string,
-  currentAgentIdentifier: string
+  currentUserId: string
 ): boolean {
-  let entity: any = null;
-
-  switch (entityType) {
-    case 'epic':
-      entity = db.getEpic(entityId);
-      break;
-    case 'story':
-      entity = db.getStory(entityId);
-      break;
-    case 'task':
-      entity = db.getTask(entityId);
-      break;
-  }
-
-  if (!entity) {
-    return false;
-  }
-
-  // Check if last modifier is different from current
-  if (entity.last_modified_by && entity.last_modified_by !== currentModifiedBy) {
-    const projectId = (() => {
-      switch (entityType) {
-        case 'epic': return db.getProjectIdForEpic(entityId);
-        case 'story': return db.getProjectIdForStory(entityId);
-        case 'task': return db.getProjectIdForTask(entityId);
-        default: return null;
-      }
-    })();
-
-    db.logSecurityEvent(
-      'conflict_detected',
-      '',
-      entityType,
-      `Concurrent modification detected: ${entityType} #${entityId} was last modified by '${entity.last_modified_by}', now being modified by '${currentModifiedBy}'`,
-      projectId,
-      entityId,
-      currentAgentIdentifier
-    );
-
-    return true;
-  }
-
+  // NOTE: Conflict detection based on last_modified_by has been removed
+  // since we moved to an assigned_to model. If concurrent modification
+  // detection is needed in the future, consider implementing optimistic
+  // locking with version numbers or updated_at timestamps.
   return false;
 }

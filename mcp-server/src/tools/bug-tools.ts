@@ -2,11 +2,11 @@ import type { CallToolRequest } from '@modelcontextprotocol/sdk/types.js';
 import type { AgileDatabase } from '@agile-mcp/shared';
 import { getProjectContext, validateProjectAccess, detectConflict, ProjectContextError } from '../utils/project-context.js';
 
-export async function handleStoryTools(request: CallToolRequest, db: AgileDatabase) {
+export async function handleBugTools(request: CallToolRequest, db: AgileDatabase) {
   const { name, arguments: args } = request.params;
 
   try {
-      if (name === 'create_story') {
+      if (name === 'create_bug') {
         const ctx = getProjectContext(
           db,
           args.project_identifier as string,
@@ -14,17 +14,18 @@ export async function handleStoryTools(request: CallToolRequest, db: AgileDataba
           
         );
 
-        // If epic_id is provided, validate it belongs to this project
-        if (args.epic_id) {
-          validateProjectAccess(db, ctx, 'epic', args.epic_id as number);
+        // If story_id is provided, validate it belongs to this project
+        if (args.story_id) {
+          validateProjectAccess(db, ctx, 'story', args.story_id as number);
         }
 
-        const story = db.createStory({
+        const bug = db.createBug({
           project_id: ctx.project_id,
-          epic_id: args.epic_id as number | undefined,
+          story_id: args.story_id as number | undefined,
           title: args.title as string,
           description: args.description as string,
-          acceptance_criteria: args.acceptance_criteria as string | undefined,
+          severity: args.severity as any,
+          error_message: args.error_message as string | undefined,
           status: args.status as any,
           priority: args.priority as any,
           points: args.points as number | undefined,
@@ -36,7 +37,7 @@ export async function handleStoryTools(request: CallToolRequest, db: AgileDataba
               type: 'text',
               text: JSON.stringify({
                 success: true,
-                story,
+                bug,
                 project: ctx.project_name,
               }, null, 2),
             },
@@ -44,7 +45,7 @@ export async function handleStoryTools(request: CallToolRequest, db: AgileDataba
         };
       }
 
-      if (name === 'update_story') {
+      if (name === 'update_bug') {
         const ctx = getProjectContext(
           db,
           args.project_identifier as string,
@@ -52,23 +53,24 @@ export async function handleStoryTools(request: CallToolRequest, db: AgileDataba
           
         );
 
-        // Validate access to the story
-        validateProjectAccess(db, ctx, 'story', args.id as number);
+        // Validate access to the bug
+        validateProjectAccess(db, ctx, 'bug', args.id as number);
 
-        // If changing epic_id, validate the new epic
-        if (args.epic_id !== undefined && args.epic_id !== null) {
-          validateProjectAccess(db, ctx, 'epic', args.epic_id as number);
+        // If changing story_id, validate the new story
+        if (args.story_id !== undefined && args.story_id !== null) {
+          validateProjectAccess(db, ctx, 'story', args.story_id as number);
         }
 
         // Detect conflicts
-        const hasConflict = detectConflict(db, 'story', args.id as number, ctx.user_id);
+        const hasConflict = detectConflict(db, 'bug', args.id as number, ctx.user_id);
 
-        const story = db.updateStory({
+        const bug = db.updateBug({
           id: args.id as number,
-          epic_id: args.epic_id as number | undefined,
+          story_id: args.story_id as number | undefined,
           title: args.title as string | undefined,
           description: args.description as string | undefined,
-          acceptance_criteria: args.acceptance_criteria as string | undefined,
+          severity: args.severity as any,
+          error_message: args.error_message as string | undefined,
           status: args.status as any,
           priority: args.priority as any,
           points: args.points as number | undefined,
@@ -80,28 +82,28 @@ export async function handleStoryTools(request: CallToolRequest, db: AgileDataba
               type: 'text',
               text: JSON.stringify({
                 success: true,
-                story,
+                bug,
                 conflict_detected: hasConflict,
-                warning: hasConflict ? 'This story was recently modified by another agent' : undefined,
+                warning: hasConflict ? 'This bug was recently modified by another agent' : undefined,
               }, null, 2),
             },
           ],
         };
       }
 
-      if (name === 'list_stories') {
+      if (name === 'list_bugs') {
         const ctx = getProjectContext(
           db,
           args.project_identifier as string,
           args.user_id as string
         );
 
-        const stories = db.listStories({
+        const bugs = db.listBugs({
           project_id: ctx.project_id,
-          epic_id: args.epic_id as number | undefined,
+          story_id: args.story_id as number | undefined,
           status: args.status as any,
           priority: args.priority as any,
-          has_dependencies: args.has_dependencies as boolean | undefined,
+          severity: args.severity as any,
         });
 
         return {
@@ -111,31 +113,28 @@ export async function handleStoryTools(request: CallToolRequest, db: AgileDataba
               text: JSON.stringify({
                 success: true,
                 project: ctx.project_name,
-                count: stories.length,
-                stories,
+                count: bugs.length,
+                bugs,
               }, null, 2),
             },
           ],
         };
       }
 
-      if (name === 'get_story') {
+      if (name === 'get_bug') {
         const ctx = getProjectContext(
           db,
           args.project_identifier as string,
           args.user_id as string
         );
 
-        const story = db.getStory(args.id as number);
-        if (!story) {
-          throw new Error(`Story ${args.id} not found`);
+        const bug = db.getBug(args.id as number);
+        if (!bug) {
+          throw new Error(`Bug ${args.id} not found`);
         }
 
         // Validate access
-        validateProjectAccess(db, ctx, 'story', args.id as number);
-
-        const tasks = db.listTasks({ project_id: ctx.project_id, story_id: args.id as number });
-        const dependencies = db.listDependencies(args.id as number);
+        validateProjectAccess(db, ctx, 'bug', args.id as number);
 
         return {
           content: [
@@ -143,16 +142,14 @@ export async function handleStoryTools(request: CallToolRequest, db: AgileDataba
               type: 'text',
               text: JSON.stringify({
                 success: true,
-                story,
-                tasks,
-                dependencies,
+                bug,
               }, null, 2),
             },
           ],
         };
       }
 
-      if (name === 'delete_story') {
+      if (name === 'delete_bug') {
         const ctx = getProjectContext(
           db,
           args.project_identifier as string,
@@ -160,9 +157,9 @@ export async function handleStoryTools(request: CallToolRequest, db: AgileDataba
         );
 
         // Validate access
-        validateProjectAccess(db, ctx, 'story', args.id as number);
+        validateProjectAccess(db, ctx, 'bug', args.id as number);
 
-        db.deleteStory(args.id as number);
+        db.deleteBug(args.id as number);
 
         return {
           content: [
@@ -170,7 +167,7 @@ export async function handleStoryTools(request: CallToolRequest, db: AgileDataba
               type: 'text',
               text: JSON.stringify({
                 success: true,
-                message: `Story ${args.id} deleted successfully`,
+                message: `Bug ${args.id} deleted successfully`,
               }, null, 2),
             },
           ],

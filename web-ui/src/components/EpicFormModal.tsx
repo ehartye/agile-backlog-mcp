@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { X } from 'lucide-react';
+import { UserSelector } from './UserSelector';
 
 interface Epic {
   id?: number;
@@ -7,6 +8,7 @@ interface Epic {
   title: string;
   description: string;
   status: 'todo' | 'in_progress' | 'review' | 'done' | 'blocked';
+  assigned_to?: string;
 }
 
 interface EpicFormModalProps {
@@ -23,6 +25,7 @@ export default function EpicFormModal({ isOpen, onClose, onSave, epic, projectId
     title: '',
     description: '',
     status: 'todo',
+    assigned_to: undefined,
   });
 
   useEffect(() => {
@@ -34,6 +37,7 @@ export default function EpicFormModal({ isOpen, onClose, onSave, epic, projectId
         title: '',
         description: '',
         status: 'todo',
+        assigned_to: undefined,
       });
     }
   }, [epic, projectId]);
@@ -110,6 +114,15 @@ export default function EpicFormModal({ isOpen, onClose, onSave, epic, projectId
               <option value="done">Done</option>
               <option value="blocked">Blocked</option>
             </select>
+          </div>
+
+          <div>
+            <UserSelector
+              value={formData.assigned_to || null}
+              onChange={(userId) => setFormData({ ...formData, assigned_to: userId || undefined })}
+              label="Assigned To"
+              placeholder="Optional"
+            />
           </div>
 
           <div className="flex gap-3 pt-4">

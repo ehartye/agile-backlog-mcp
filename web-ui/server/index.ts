@@ -19,6 +19,28 @@ app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
+// Users
+app.get('/api/users', (_req, res) => {
+  try {
+    const users = db.listUsers();
+    res.json(users);
+  } catch (error) {
+    res.status(500).json({ error: (error as Error).message });
+  }
+});
+
+app.get('/api/users/:userId', (req, res) => {
+  try {
+    const user = db.getUser(req.params.userId);
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    res.json(user);
+  } catch (error) {
+    res.status(500).json({ error: (error as Error).message });
+  }
+});
+
 // Projects
 app.get('/api/projects', (_req, res) => {
   try {
@@ -108,7 +130,7 @@ app.get('/api/epics/:id', (req, res) => {
 
 app.post('/api/epics', (req, res) => {
   try {
-    const epic = db.createEpic(req.body, 'web-ui');
+    const epic = db.createEpic(req.body);
     res.status(201).json(epic);
   } catch (error) {
     res.status(400).json({ error: (error as Error).message });
@@ -117,7 +139,7 @@ app.post('/api/epics', (req, res) => {
 
 app.patch('/api/epics/:id', (req, res) => {
   try {
-    const epic = db.updateEpic({ id: parseInt(req.params.id), ...req.body }, 'web-ui');
+    const epic = db.updateEpic({ id: parseInt(req.params.id), ...req.body });
     res.json(epic);
   } catch (error) {
     res.status(400).json({ error: (error as Error).message });
@@ -191,7 +213,7 @@ app.get('/api/stories/:id', (req, res) => {
 
 app.post('/api/stories', (req, res) => {
   try {
-    const story = db.createStory(req.body, 'web-ui');
+    const story = db.createStory(req.body);
     res.status(201).json(story);
   } catch (error) {
     res.status(400).json({ error: (error as Error).message });
@@ -200,7 +222,7 @@ app.post('/api/stories', (req, res) => {
 
 app.patch('/api/stories/:id', (req, res) => {
   try {
-    const story = db.updateStory({ id: parseInt(req.params.id), ...req.body }, 'web-ui');
+    const story = db.updateStory({ id: parseInt(req.params.id), ...req.body });
     res.json(story);
   } catch (error) {
     res.status(400).json({ error: (error as Error).message });
@@ -210,6 +232,87 @@ app.patch('/api/stories/:id', (req, res) => {
 app.delete('/api/stories/:id', (req, res) => {
   try {
     db.deleteStory(parseInt(req.params.id));
+    res.status(204).send();
+  } catch (error) {
+    res.status(500).json({ error: (error as Error).message });
+  }
+});
+
+// Bugs
+app.get('/api/bugs', (req, res) => {
+  try {
+    const filter: any = {};
+    if (req.query.project_id) filter.project_id = parseInt(req.query.project_id as string);
+    if (req.query.story_id) filter.story_id = parseInt(req.query.story_id as string);
+    if (req.query.status) filter.status = req.query.status;
+    if (req.query.priority) filter.priority = req.query.priority;
+    if (req.query.severity) filter.severity = req.query.severity;
+
+    let bugs = db.listBugs(filter);
+
+    // Filter by sprint if sprint_id is provided
+    if (req.query.sprint_id) {
+      if (req.query.sprint_id === 'backlog') {
+        // Show bugs not in any active or planning sprint
+        const allSprints = db.listSprints({
+          project_id: filter.project_id,
+        }).filter(s => s.status === 'active' || s.status === 'planning');
+
+        const bugIdsInSprints = new Set<number>();
+        for (const sprint of allSprints) {
+          const sprintBugs = db.getSprintBugs(sprint.id);
+          sprintBugs.forEach(b => bugIdsInSprints.add(b.id));
+        }
+
+        bugs = bugs.filter(b => !bugIdsInSprints.has(b.id));
+      } else {
+        // Show bugs in specific sprint
+        const sprintId = parseInt(req.query.sprint_id as string);
+        const sprintBugs = db.getSprintBugs(sprintId);
+        const bugIdsInSprint = new Set(sprintBugs.map(b => b.id));
+        bugs = bugs.filter(b => bugIdsInSprint.has(b.id));
+      }
+    }
+
+    res.json(bugs);
+  } catch (error) {
+    res.status(500).json({ error: (error as Error).message });
+  }
+});
+
+app.get('/api/bugs/:id', (req, res) => {
+  try {
+    const bug = db.getBug(parseInt(req.params.id));
+    if (!bug) {
+      return res.status(404).json({ error: 'Bug not found' });
+    }
+    res.json({ bug });
+  } catch (error) {
+    res.status(500).json({ error: (error as Error).message });
+  }
+});
+
+app.post('/api/bugs', (req, res) => {
+  try {
+    const bug = db.createBug(req.body);
+    res.status(201).json(bug);
+  } catch (error) {
+    res.status(400).json({ error: (error as Error).message });
+  }
+});
+
+app.patch('/api/bugs/:id', (req, res) => {
+  try {
+    const bug = db.updateBug({ id: parseInt(req.params.id), ...req.body });
+    res.json(bug);
+  } catch (error) {
+    res.status(400).json({ error: (error as Error).message });
+  }
+});
+
+app.delete('/api/bugs/:id', (req, res) => {
+  try {
+    db.deleteBug(parseInt(req.params.id));
     res.status(204).send();
   } catch (error) {
     res.status(500).json({ error: (error as Error).message });
@@ -234,7 +337,7 @@ app.get('/api/tasks', (req, res) => {
 
 app.post('/api/tasks', (req, res) => {
   try {
-    const task = db.createTask(req.body, 'web-ui');
+    const task = db.createTask(req.body);
     res.status(201).json(task);
   } catch (error) {
     res.status(400).json({ error: (error as Error).message });
@@ -243,7 +346,7 @@ app.post('/api/tasks', (req, res) => {
 
 app.patch('/api/tasks/:id', (req, res) => {
   try {
-    const task = db.updateTask({ id: parseInt(req.params.id), ...req.body }, 'web-ui');
+    const task = db.updateTask({ id: parseInt(req.params.id), ...req.body });
     res.json(task);
   } catch (error) {
     res.status(400).json({ error: (error as Error).message });
@@ -459,8 +562,9 @@ app.get('/api/sprints/:id', (req, res) => {
       return res.status(404).json({ error: 'Sprint not found' });
     }
     const stories = db.getSprintStories(parseInt(req.params.id));
+    const bugs = db.getSprintBugs(parseInt(req.params.id));
     const capacity = db.calculateSprintCapacity(parseInt(req.params.id));
-    res.json({ sprint, stories, capacity });
+    res.json({ sprint, stories, bugs, capacity });
   } catch (error) {
     res.status(500).json({ error: (error as Error).message });
   }
@@ -468,7 +572,7 @@ app.get('/api/sprints/:id', (req, res) => {
 
 app.post('/api/sprints', (req, res) => {
   try {
-    const sprint = db.createSprint(req.body, 'web-ui');
+    const sprint = db.createSprint(req.body);
     res.status(201).json(sprint);
   } catch (error) {
     res.status(400).json({ error: (error as Error).message });
@@ -477,7 +581,7 @@ app.post('/api/sprints', (req, res) => {
 
 app.patch('/api/sprints/:id', (req, res) => {
   try {
-    const sprint = db.updateSprint({ id: parseInt(req.params.id), ...req.body }, 'web-ui');
+    const sprint = db.updateSprint({ id: parseInt(req.params.id), ...req.body });
     res.json(sprint);
   } catch (error) {
     res.status(400).json({ error: (error as Error).message });
@@ -495,7 +599,7 @@ app.delete('/api/sprints/:id', (req, res) => {
 
 app.post('/api/sprints/:sprintId/stories/:storyId', (req, res) => {
   try {
-    db.addStoryToSprint(parseInt(req.params.sprintId), parseInt(req.params.storyId), 'web-ui');
+    db.addStoryToSprint(parseInt(req.params.sprintId), parseInt(req.params.storyId));
     const capacity = db.calculateSprintCapacity(parseInt(req.params.sprintId));
     res.json({ success: true, capacity });
   } catch (error) {
@@ -513,6 +617,26 @@ app.delete('/api/sprints/:sprintId/stories/:storyId', (req, res) => {
   }
 });
 
+app.post('/api/sprints/:sprintId/bugs/:bugId', (req, res) => {
+  try {
+    db.addBugToSprint(parseInt(req.params.sprintId), parseInt(req.params.bugId));
+    const capacity = db.calculateSprintCapacity(parseInt(req.params.sprintId));
+    res.json({ success: true, capacity });
+  } catch (error) {
+    res.status(400).json({ error: (error as Error).message });
+  }
+});
+
+app.delete('/api/sprints/:sprintId/bugs/:bugId', (req, res) => {
+  try {
+    db.removeBugFromSprint(parseInt(req.params.sprintId), parseInt(req.params.bugId));
+    const capacity = db.calculateSprintCapacity(parseInt(req.params.sprintId));
+    res.json({ success: true, capacity });
+  } catch (error) {
+    res.status(500).json({ error: (error as Error).message });
+  }
+});
+
 app.post('/api/sprints/:id/start', (req, res) => {
   try {
     const sprint = db.getSprint(parseInt(req.params.id));
@@ -522,7 +646,7 @@ app.post('/api/sprints/:id/start', (req, res) => {
     if (sprint.status !== 'planning') {
       return res.status(400).json({ error: `Sprint is already in '${sprint.status}' status` });
     }
-    const updated = db.updateSprint({ id: parseInt(req.params.id), status: 'active' }, 'web-ui');
+    const updated = db.updateSprint({ id: parseInt(req.params.id), status: 'active' });
     const snapshot = db.createSprintSnapshot(parseInt(req.params.id));
     res.json({ sprint: updated, initial_snapshot: snapshot });
   } catch (error) {
@@ -541,22 +665,31 @@ app.post('/api/sprints/:id/complete', (req, res) => {
     }
 
     const finalSnapshot = db.createSprintSnapshot(parseInt(req.params.id));
-    const updated = db.updateSprint({ id: parseInt(req.params.id), status: 'completed' }, 'web-ui');
+    const updated = db.updateSprint({ id: parseInt(req.params.id), status: 'completed' });
 
     const stories = db.getSprintStories(sprint.id);
+    const bugs = db.getSprintBugs(sprint.id);
     const capacity = db.calculateSprintCapacity(parseInt(req.params.id));
 
     const completedStories = stories.filter(s => s.status === 'done');
     const incompleteStories = stories.filter(s => s.status !== 'done');
+    const completedBugs = bugs.filter(b => b.status === 'done');
+    const incompleteBugs = bugs.filter(b => b.status !== 'done');
+
+    const totalItems = stories.length + bugs.length;
+    const completedItems = completedStories.length + completedBugs.length;
 
     const report = {
       total_stories: stories.length,
       completed_stories: completedStories.length,
       incomplete_stories: incompleteStories.length,
+      total_bugs: bugs.length,
+      completed_bugs: completedBugs.length,
+      incomplete_bugs: incompleteBugs.length,
       completed_points: capacity.completed,
       remaining_points: capacity.remaining,
       velocity: capacity.completed,
-      completion_rate: stories.length > 0 ? Math.round((completedStories.length / stories.length) * 100) : 0,
+      completion_rate: totalItems > 0 ? Math.round((completedItems / totalItems) * 100) : 0,
     };
 
     res.json({ sprint: updated, final_snapshot: finalSnapshot, report });

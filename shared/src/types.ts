@@ -1,10 +1,13 @@
 // Core entity types
 export type EntityStatus = 'todo' | 'in_progress' | 'review' | 'done' | 'blocked';
 export type Priority = 'low' | 'medium' | 'high' | 'critical';
+export type BugSeverity = 'critical' | 'major' | 'minor' | 'trivial';
 export type DependencyType = 'blocks' | 'blocked_by';
-export type EntityType = 'project' | 'epic' | 'story' | 'task';
+export type EntityType = 'project' | 'epic' | 'story' | 'task' | 'bug';
 export type RelationshipType = 'blocks' | 'blocked_by' | 'related_to' | 'cloned_from' | 'depends_on';
 export type SprintStatus = 'planning' | 'active' | 'completed' | 'cancelled';
+export type UserType = 'human' | 'code_agent' | 'doc_agent' | 'qa_agent' | 'system';
+export type TaskType = 'Code Change' | 'Doc Change' | 'Research' | 'QA';
 
 export interface Project {
   id: number;
@@ -16,16 +19,23 @@ export interface Project {
   last_accessed_at: string;
 }
 
+export interface User {
+  user_id: string;  // Primary key (e.g., "Human_Admin", "Code_Agent_1")
+  display_name: string;
+  user_type: UserType;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface Epic {
   id: number;
   project_id: number;
   title: string;
   description: string;
   status: EntityStatus;
+  assigned_to: string | null;  // FK to users.user_id
   created_at: string;
   updated_at: string;
-  agent_identifier: string | null;
-  last_modified_by: string | null;
 }
 
 export interface Story {
@@ -38,10 +48,9 @@ export interface Story {
   status: EntityStatus;
   priority: Priority;
   points: number | null;
+  assigned_to: string | null;  // FK to users.user_id
   created_at: string;
   updated_at: string;
-  agent_identifier: string | null;
-  last_modified_by: string | null;
 }
 
 export interface Task {
@@ -49,12 +58,27 @@ export interface Task {
   story_id: number;
   title: string;
   description: string;
+  task_type: TaskType;
   status: EntityStatus;
-  assignee: string | null;
+  assigned_to: string | null;  // FK to users.user_id (replaces assignee)
   created_at: string;
   updated_at: string;
-  agent_identifier: string | null;
-  last_modified_by: string | null;
+}
+
+export interface Bug {
+  id: number;
+  project_id: number;
+  story_id: number | null;
+  title: string;
+  description: string;
+  severity: BugSeverity;
+  error_message: string | null;
+  status: EntityStatus;
+  priority: Priority;
+  points: number | null;
+  assigned_to: string | null;  // FK to users.user_id
+  created_at: string;
+  updated_at: string;
 }
 
 export interface Dependency {
@@ -73,7 +97,7 @@ export interface Relationship {
   target_id: number;
   relationship_type: RelationshipType;
   project_id: number;
-  agent_identifier: string;
+  created_by: string;  // FK to users.user_id (renamed from agent_identifier)
   created_at: string;
   updated_at: string;
 }
@@ -92,7 +116,7 @@ export interface Note {
 
 export interface StatusTransition {
   id: number;
-  entity_type: 'epic' | 'story' | 'task';
+  entity_type: 'epic' | 'story' | 'task' | 'bug';
   from_status: EntityStatus;
   to_status: EntityStatus;
   allowed: boolean;
@@ -102,7 +126,7 @@ export interface SecurityLog {
   id: number;
   event_type: 'unauthorized_access' | 'project_violation' | 'conflict_detected';
   project_id: number | null;
-  agent_identifier: string | null;
+  user_id: string | null;  // FK to users.user_id (renamed from agent_identifier)
   attempted_path: string;
   entity_type: string;
   entity_id: number | null;
@@ -119,15 +143,23 @@ export interface Sprint {
   end_date: string;
   capacity_points: number | null;
   status: SprintStatus;
+  created_by: string | null;  // FK to users.user_id (renamed from agent_identifier)
   created_at: string;
   updated_at: string;
-  agent_identifier: string | null;
 }
 
 export interface SprintStory {
   id: number;
   sprint_id: number;
   story_id: number;
+  added_at: string;
+  added_by: string | null;
+}
+
+export interface SprintBug {
+  id: number;
+  sprint_id: number;
+  bug_id: number;
   added_at: string;
   added_by: string | null;
 }
@@ -150,11 +182,18 @@ export interface CreateProjectInput {
   description: string;
 }
 
+export interface CreateUserInput {
+  user_id: string;
+  display_name: string;
+  user_type: UserType;
+}
+
 export interface CreateEpicInput {
   project_id: number;
   title: string;
   description: string;
   status?: EntityStatus;
+  assigned_to?: string;  // Optional user assignment
 }
 
 export interface CreateStoryInput {
@@ -166,14 +205,29 @@ export interface CreateStoryInput {
   status?: EntityStatus;
   priority?: Priority;
   points?: number | null;
+  assigned_to?: string;  // Optional user assignment
 }
 
 export interface CreateTaskInput {
   story_id: number;
   title: string;
   description: string;
+  task_type?: TaskType;  // Defaults to 'Code Change'
   status?: EntityStatus;
-  assignee?: string | null;
+  assigned_to?: string;  // Optional user assignment (replaces assignee)
+}
+
+export interface CreateBugInput {
+  project_id: number;
+  story_id?: number | null;
+  title: string;
+  description: string;
+  severity: BugSeverity;
+  error_message?: string | null;
+  status?: EntityStatus;
+  priority?: Priority;
+  points?: number | null;
+  assigned_to?: string;  // Optional user assignment
 }
 
 export interface CreateDependencyInput {
@@ -189,7 +243,7 @@ export interface CreateRelationshipInput {
   target_id: number;
   relationship_type: RelationshipType;
   project_id: number;
-  agent_identifier: string;
+  created_by: string;  // User who created the relationship
 }
 
 export interface CreateNoteInput {
@@ -219,11 +273,18 @@ export interface CreateSprintInput {
 }
 
 // Update types (all fields optional except id)
+export interface UpdateUserInput {
+  user_id: string;
+  display_name?: string;
+  user_type?: UserType;
+}
+
 export interface UpdateEpicInput {
   id: number;
   title?: string;
   description?: string;
   status?: EntityStatus;
+  assigned_to?: string;  // Reassign to different user
 }
 
 export interface UpdateStoryInput {
@@ -235,6 +296,7 @@ export interface UpdateStoryInput {
   status?: EntityStatus;
   priority?: Priority;
   points?: number | null;
+  assigned_to?: string;  // Reassign to different user
 }
 
 export interface UpdateTaskInput {
@@ -242,8 +304,22 @@ export interface UpdateTaskInput {
   story_id?: number;
   title?: string;
   description?: string;
+  task_type?: TaskType;
   status?: EntityStatus;
-  assignee?: string | null;
+  assigned_to?: string;  // Reassign to different user (replaces assignee)
+}
+
+export interface UpdateBugInput {
+  id: number;
+  story_id?: number | null;
+  title?: string;
+  description?: string;
+  severity?: BugSeverity;
+  error_message?: string | null;
+  status?: EntityStatus;
+  priority?: Priority;
+  points?: number | null;
+  assigned_to?: string;  // Reassign to different user
 }
 
 // Update types for projects
@@ -268,6 +344,7 @@ export interface UpdateSprintInput {
 export interface EpicFilter {
   project_id?: number;
   status?: EntityStatus;
+  assigned_to?: string;  // Filter by assigned user
 }
 
 export interface StoryFilter {
@@ -276,13 +353,24 @@ export interface StoryFilter {
   status?: EntityStatus;
   priority?: Priority;
   has_dependencies?: boolean;
+  assigned_to?: string;  // Filter by assigned user
 }
 
 export interface TaskFilter {
   project_id?: number;
   story_id?: number;
   status?: EntityStatus;
-  assignee?: string;
+  task_type?: TaskType;  // Filter by task type
+  assigned_to?: string;  // Filter by assigned user (replaces assignee)
+}
+
+export interface BugFilter {
+  project_id?: number;
+  story_id?: number;
+  status?: EntityStatus;
+  priority?: Priority;
+  severity?: BugSeverity;
+  assigned_to?: string;  // Filter by assigned user
 }
 
 export interface RelationshipFilter {
@@ -311,8 +399,7 @@ export interface ProjectContext {
   project_identifier: string;
   project_id: number;
   project_name: string;
-  agent_identifier: string;
-  modified_by: string;
+  user_id: string;  // User performing the operation (replaces agent_identifier/modified_by)
 }
 
 // Graph data structures for UI
